@@ -1,0 +1,579 @@
+<title>Domain Scout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ink: #15212a;
+  --ink-soft: #4d5b63;
+  --paper: #f3f5f2;
+  --panel: #ffffff;
+  --line: #d9dfdb;
+  --accent: #0f6f63;
+  --accent-soft: #dcefeb;
+  --buy: #1d7a3e;
+  --buy-bg: #def3e4;
+  --maybe: #9a6200;
+  --maybe-bg: #fbeed3;
+  --skip: #b0312b;
+  --skip-bg: #f8e0de;
+  --bar-track: #e6ebe8;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #e4ebe7;
+    --ink-soft: #9fb0a9;
+    --paper: #0f1618;
+    --panel: #172124;
+    --line: #2a3a3d;
+    --accent: #4cc3b0;
+    --accent-soft: #173834;
+    --buy: #6fd694;
+    --buy-bg: #183424;
+    --maybe: #f0b54a;
+    --maybe-bg: #3a2c12;
+    --skip: #f08a82;
+    --skip-bg: #3d1c1a;
+    --bar-track: #25322f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e4ebe7;
+  --ink-soft: #9fb0a9;
+  --paper: #0f1618;
+  --panel: #172124;
+  --line: #2a3a3d;
+  --accent: #4cc3b0;
+  --accent-soft: #173834;
+  --buy: #6fd694;
+  --buy-bg: #183424;
+  --maybe: #f0b54a;
+  --maybe-bg: #3a2c12;
+  --skip: #f08a82;
+  --skip-bg: #3d1c1a;
+  --bar-track: #25322f;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 0 16px;
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 24px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+h1 .dot { color: var(--accent); }
+.tagline { color: var(--ink-soft); margin: 4px 0 0; max-width: 60ch; }
+.mode {
+  font-size: 13px;
+  color: var(--maybe);
+  background: var(--maybe-bg);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.layout { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin: 0;
+}
+label { font-weight: 500; font-size: 14px; }
+textarea {
+  width: 100%;
+  min-height: 190px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+textarea:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { font-size: 13px; color: var(--ink-soft); margin: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+}
+.primary { background: var(--accent); color: var(--panel); }
+.primary:hover { filter: brightness(1.08); }
+.ghost { background: transparent; color: var(--accent); }
+.ghost:hover { background: var(--accent-soft); }
+.sliders { display: grid; gap: 12px; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.slider output { font-family: var(--mono); font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.slider small { grid-column: 1 / -1; color: var(--ink-soft); font-size: 12px; }
+.results { display: grid; gap: 16px; min-width: 0; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 14px; font-weight: 600; border-radius: 999px; padding: 5px 14px; font-variant-numeric: tabular-nums; }
+.chip.buy { color: var(--buy); background: var(--buy-bg); }
+.chip.maybe { color: var(--maybe); background: var(--maybe-bg); }
+.chip.skip { color: var(--skip); background: var(--skip-bg); }
+.chip.total { color: var(--ink-soft); background: var(--bar-track); }
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--accent); }
+td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: var(--accent-soft); }
+.dom { font-family: var(--mono); font-weight: 500; font-size: 15px; white-space: nowrap; }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.verdict { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 6px; padding: 3px 10px; white-space: nowrap; }
+.verdict.buy { color: var(--buy); background: var(--buy-bg); }
+.verdict.maybe { color: var(--maybe); background: var(--maybe-bg); }
+.verdict.skip { color: var(--skip); background: var(--skip-bg); }
+.score { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; min-width: 120px; }
+.score b { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.bar { height: 6px; background: var(--bar-track); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; }
+.mini { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 12px; font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.mini span b { color: var(--ink); font-weight: 600; font-family: var(--mono); }
+.reasons { margin: 0; padding-left: 18px; font-size: 13px; color: var(--ink-soft); }
+.reasons li { margin: 1px 0; }
+.reasons li.bad { color: var(--skip); }
+.reasons li.good { color: var(--buy); }
+.detail td { background: var(--paper); }
+.empty { padding: 28px; text-align: center; color: var(--ink-soft); }
+.invalid { color: var(--skip); font-size: 13px; }
+footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
+footer p { margin: 0 0 6px; }
+@media (prefers-reduced-motion: no-preference) { .bar i { transition: width .35s ease; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Domain Scout<span class="dot">.</span></h1>
+      <p class="tagline">Paste the names you're eyeing and get a Buy, Maybe or Skip call for each one, with the reasons behind it.</p>
+    </div>
+    <span class="mode" title="Scores come from built-in rules. Connect Jev to replace them with AI judgments.">Demo scoring · Jev not connected</span>
+  </header>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="in-h">
+      <h2 id="in-h">Domains to check</h2>
+      <div style="display:grid;gap:6px">
+        <label for="domains">One domain per line</label>
+        <textarea id="domains" spellcheck="false"></textarea>
+        <p class="hint">Example names are loaded. Replace them with your own list.</p>
+      </div>
+      <div class="btns">
+        <button class="primary" id="run">Check domains</button>
+        <button class="ghost" id="clear">Clear list</button>
+      </div>
+
+      <h2>What matters to you</h2>
+      <div class="sliders" id="sliders"></div>
+      <div class="slider">
+        <label for="buyAt">Buy when score is at least</label>
+        <output id="buyAtOut"></output>
+        <input type="range" id="buyAt" min="40" max="90" step="1">
+        <small>Scores 20 points below this line are marked Maybe.</small>
+      </div>
+      <button class="ghost" id="reset">Reset to defaults</button>
+    </section>
+
+    <section class="results" aria-labelledby="out-h">
+      <h2 id="out-h">Results</h2>
+      <div class="summary" id="summary"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="domain">Domain</th>
+              <th class="sortable" data-sort="verdict">Call</th>
+              <th class="sortable" data-sort="score">Score</th>
+              <th>Breakdown</th>
+              <th>Likely buyer</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="hint">Click a row to see why it got its call. Click a column name to sort.</p>
+    </section>
+  </div>
+
+  <footer>
+    <p><b>How the score works:</b> every name is rated on brandability, how easy it is to say, its extension and whether it uses real words. Your sliders set how much each counts. A name that includes a famous brand is always a Skip, because of trademark risk.</p>
+    <p>These scores come from simple built-in rules and are a starting point, not a price estimate. Always check availability, recent sales of similar names and trademarks before buying.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Reference data ----------
+  var TLD_TIERS = { com: 1, ai: 0.8, io: 0.65, co: 0.55, net: 0.45, org: 0.45, app: 0.45, dev: 0.4, xyz: 0.2 };
+  var DEFAULT_TLD = 0.25;
+
+  var WORDS = new Set((
+    "a able about ace act ad add age agent ai air all alpha app apple art ask auto away " +
+    "baby back bank base bay beach bear beauty bed best bet big bike bio bird bit black " +
+    "blue boat body bold book boost box brain brand bright build business buy cab cafe " +
+    "call calm cam camp car card care cash cat chain chat cheap check chef city clean clear " +
+    "click cloud club coach code coin cold cool core cost craft credit crypto cup cure " +
+    "daily data date day deal deals deep dental design dev diet digital doc dog door dream " +
+    "drive drop eat eco edge energy estate event eye face fair fam farm fast fit fix " +
+    "flow fly food force form fox free fresh fuel fun fund game garden gear gift go gold " +
+    "golf good green grid grow guide gym hair hand happy health heart help hero high " +
+    "hire home host hot house hub ideal idea info ink insure invest jet job joy just " +
+    "key kid kit lab land law lead learn legal lens life light line link list live loan loans " +
+    "local lock logic loop love lucky mail make map market mart match max media med " +
+    "mind mint mobile money moon motor move music my name nest net new next nova now " +
+    "one open pay peak pet phone pilot pixel plan play plus pod point pool pop post " +
+    "power prime pro pure quick quest rank rate ready real rent rest ride rise road " +
+    "robot rock room root run safe sale save scan school scout sea secure sell send " +
+    "shop show sign skill sky smart snap social soft solar space spark spot star start " +
+    "stock store stream studio style sun super sure swift talk task team tech test " +
+    "thing time tip today tool top tour town track trade travel tree trend trip true " +
+    "trust truck tv u up urban value vet via video view vision vita voice wallet watch " +
+    "wave way wealth web well wise work world yoga you zen zone"
+  ).split(" "));
+
+  var BRANDS = ["google", "amazon", "facebook", "netflix", "tesla", "nike", "adidas", "paypal",
+    "youtube", "instagram", "tiktok", "microsoft", "iphone", "disney", "cocacola", "uber",
+    "airbnb", "spotify", "samsung", "walmart", "chatgpt", "openai", "whatsapp", "twitter",
+    "linkedin", "ebay", "rolex", "gucci", "pepsi", "starbucks", "mcdonalds", "bitcoin"];
+
+  var INDUSTRIES = [
+    ["Finance", "bank cash coin credit crypto fund invest loan loans money pay wallet wealth stock trade insure rate cost save value"],
+    ["Health & fitness", "health fit gym yoga diet med cure dental care body vita well heart"],
+    ["Tech & AI", "ai app bit code cloud data dev digital grid logic pixel robot smart soft tech web link net host"],
+    ["Real estate & home", "home house estate land rent room nest door garden bed"],
+    ["Shopping", "shop store mart buy sell sale deal deals market cheap gift box"],
+    ["Travel", "travel trip tour jet fly sea beach road ride bay"],
+    ["Food", "food eat chef cafe cup fresh"],
+    ["Energy & green", "solar energy eco green power fuel sun"],
+    ["Media & creative", "media video music studio stream show art design style craft tv"],
+    ["Education & jobs", "learn school skill job hire coach guide"]
+  ].map(function (pair) { return { name: pair[0], words: new Set(pair[1].split(" ")) }; });
+
+  var FACTORS = [
+    { key: "brand", label: "Brandability", help: "Short, clean, memorable names score higher." },
+    { key: "say", label: "Easy to say", help: "Passes the radio test: hear it once, spell it right." },
+    { key: "ext", label: "Extension", help: ".com is strongest, then .ai, .io, .co and others." },
+    { key: "words", label: "Real words", help: "One or two dictionary words beat coined names." }
+  ];
+  var DEFAULTS = { brand: 35, say: 25, ext: 25, words: 15, buyAt: 70 };
+  var SAMPLE = ["cloudnest.com", "zenpay.ai", "homefit.co", "solarhub.com", "kwyxtr.io",
+    "best-cheap-loans-4u.net", "googledeals.com", "trendly.xyz", "vexo.com"].join("\n");
+
+  // ---------- Facts (exact, computed by code) ----------
+  function parse(raw) {
+    var d = raw.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
+    if (d.indexOf("www.") === 0) d = d.slice(4);
+    var dot = d.indexOf(".");
+    if (dot < 1) return null;
+    var label = d.slice(0, dot), tld = d.slice(dot + 1);
+    if (!/^[a-z0-9-]{1,63}$/.test(label) || /^-|-$/.test(label) || !/^[a-z.]{2,}$/.test(tld)) return null;
+    return { label: label, tld: tld };
+  }
+
+  function splitWords(label) {
+    var out = [];
+    var parts = label.split("-").filter(Boolean);
+    for (var p = 0; p < parts.length; p++) {
+      var part = parts[p];
+      if (/^\d+$/.test(part)) { out.push(part); continue; }
+      var best = new Array(part.length + 1).fill(null);
+      best[0] = [];
+      for (var end = 1; end <= part.length; end++) {
+        for (var start = 0; start < end; start++) {
+          if (best[start] && WORDS.has(part.slice(start, end))) {
+            var cand = best[start].concat(part.slice(start, end));
+            if (!best[end] || cand.length < best[end].length) best[end] = cand;
+          }
+        }
+      }
+      if (!best[part.length]) return null;
+      out = out.concat(best[part.length]);
+    }
+    return out;
+  }
+
+  function pattern(label) {
+    return label.replace(/[aeiou]/g, "V").replace(/y(?![aeiou])/g, "V").replace(/[a-z]/g, "C").replace(/\d/g, "N");
+  }
+
+  // ---------- Judgments (demo rules; Jev would answer these) ----------
+  function clamp(x) { return Math.max(0, Math.min(1, x)); }
+
+  function judge(f) {
+    var letters = f.label.replace(/[^a-z]/g, "");
+    var runs = letters.replace(/[aeiouy]/g, " ").split(" ");
+    var maxRun = Math.max.apply(null, runs.map(function (r) { return r.length; }));
+    var vowels = (letters.match(/[aeiouy]/g) || []).length;
+    var vowelRatio = letters.length ? vowels / letters.length : 0;
+
+    var say = maxRun <= 2 ? 1 : maxRun === 3 ? 0.6 : 0.2;
+    if (vowelRatio < 0.25 || vowelRatio > 0.7) say -= 0.25;
+    say -= 0.2 * f.hyphens + (f.digits ? 0.25 : 0);
+    if (f.words && f.words.length <= 2) say = Math.max(say, 0.85);
+
+    var n = f.length;
+    var brand = n <= 5 ? 1 : n <= 7 ? 0.85 : n <= 10 ? 0.65 : n <= 14 ? 0.4 : 0.2;
+    if (f.words && f.words.length === 1) brand += 0.1;
+    if (f.words && f.words.length >= 3) brand -= 0.25;
+    if (!f.words && say < 0.6) brand -= 0.3;
+    brand -= 0.3 * f.hyphens + (f.digits ? 0.25 : 0);
+
+    var words = !f.words ? (say >= 0.8 ? 0.45 : 0.15) : f.words.length <= 2 ? 1 : f.words.length === 3 ? 0.5 : 0.2;
+
+    var brandHit = BRANDS.filter(function (b) { return f.label.replace(/-/g, "").indexOf(b) !== -1; })[0] || null;
+
+    var industry = "General";
+    if (f.words) {
+      var bestHits = 0;
+      INDUSTRIES.forEach(function (ind) {
+        var hits = f.words.filter(function (w) { return ind.words.has(w); }).length;
+        if (hits > bestHits) { bestHits = hits; industry = ind.name; }
+      });
+    }
+    if (f.tld === "ai" && industry === "General") industry = "Tech & AI";
+
+    return {
+      brand: clamp(brand), say: clamp(say), ext: f.tldTier, words: clamp(words),
+      trademark: brandHit, industry: industry, maxRun: maxRun
+    };
+  }
+
+  function evaluate(raw) {
+    var p = parse(raw);
+    if (!p) return { raw: raw.trim(), invalid: true };
+    var f = {
+      domain: p.label + "." + p.tld, label: p.label, tld: p.tld, length: p.label.length,
+      hyphens: (p.label.match(/-/g) || []).length, digits: (p.label.match(/\d/g) || []).length,
+      words: splitWords(p.label), tldTier: TLD_TIERS[p.tld] !== undefined ? TLD_TIERS[p.tld] : DEFAULT_TLD
+    };
+    f.pattern = pattern(p.label);
+    return { f: f, j: judge(f) };
+  }
+
+  function decide(item, s) {
+    var total = FACTORS.reduce(function (sum, x) { return sum + s[x.key]; }, 0) || 1;
+    var score = Math.round(100 * FACTORS.reduce(function (sum, x) { return sum + item.j[x.key] * s[x.key]; }, 0) / total);
+    var verdict = item.j.trademark ? "skip" : score >= s.buyAt ? "buy" : score >= s.buyAt - 20 ? "maybe" : "skip";
+    return { score: score, verdict: verdict, reasons: reasons(item) };
+  }
+
+  function reasons(item) {
+    var f = item.f, j = item.j, r = [];
+    if (j.trademark) r.push(["bad", "Contains the brand “" + j.trademark + "”. High trademark risk, so avoid it."]);
+    if (f.length <= 5) r.push(["good", f.length + " letters. Short names are rare and valuable."]);
+    else if (f.length >= 13) r.push(["bad", f.length + " characters is long and hard to remember."]);
+    if (f.words && f.words.length === 1) r.push(["good", "A single dictionary word."]);
+    else if (f.words && f.words.length === 2) r.push(["good", "Two real words: " + f.words.join(" + ") + "."]);
+    else if (f.words && f.words.length >= 3) r.push(["bad", f.words.length + " words (" + f.words.join(" + ") + "). Too many to be brandable."]);
+    else if (j.say >= 0.8) r.push(["", "A coined name that is easy to say. Can work as a startup brand."]);
+    else r.push(["bad", "Not real words and hard to pronounce."]);
+    if (j.maxRun >= 3) r.push(["bad", j.maxRun + " consonants in a row fails the radio test."]);
+    if (f.hyphens) r.push(["bad", "Hyphens make it hard to say and easy to mistype."]);
+    if (f.digits) r.push(["bad", "Numbers get confused with spelled-out words."]);
+    if (f.tld === "com") r.push(["good", ".com is the strongest resale extension."]);
+    else if (f.tldTier >= 0.6) r.push(["", "." + f.tld + " sells well in its niche, but not as widely as .com."]);
+    else r.push(["bad", "." + f.tld + " has a weak resale market."]);
+    return r;
+  }
+
+  // ---------- Settings (remembered in this browser when possible) ----------
+  var STORE = "domain-scout-v1";
+  var state = load();
+
+  function load() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE) || "null");
+      if (saved && saved.settings) return saved;
+    } catch (e) {}
+    return { settings: Object.assign({}, DEFAULTS), list: SAMPLE };
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  // ---------- UI ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var sortKey = "verdict", sortDir = -1, openRow = null, results = [];
+
+  function buildSliders() {
+    $("sliders").innerHTML = FACTORS.map(function (x) {
+      return '<div class="slider"><label for="w-' + x.key + '">' + x.label + '</label>' +
+        '<output id="o-' + x.key + '"></output>' +
+        '<input type="range" id="w-' + x.key + '" min="0" max="50" step="1" data-key="' + x.key + '">' +
+        '<small>' + x.help + '</small></div>';
+    }).join("");
+    FACTORS.forEach(function (x) {
+      $("w-" + x.key).addEventListener("input", function (e) {
+        state.settings[x.key] = +e.target.value; syncSliders(); rescore();
+      });
+    });
+    $("buyAt").addEventListener("input", function (e) {
+      state.settings.buyAt = +e.target.value; syncSliders(); rescore();
+    });
+  }
+
+  function syncSliders() {
+    var s = state.settings;
+    var total = FACTORS.reduce(function (sum, x) { return sum + s[x.key]; }, 0) || 1;
+    FACTORS.forEach(function (x) {
+      $("w-" + x.key).value = s[x.key];
+      $("o-" + x.key).textContent = Math.round(100 * s[x.key] / total) + "%";
+    });
+    $("buyAt").value = s.buyAt;
+    $("buyAtOut").textContent = s.buyAt;
+  }
+
+  function run() {
+    state.list = $("domains").value;
+    var seen = new Set();
+    results = state.list.split(/[\n,]+/).map(function (s) { return s.trim(); })
+      .filter(function (s) { if (!s || seen.has(s.toLowerCase())) return false; seen.add(s.toLowerCase()); return true; })
+      .map(evaluate);
+    openRow = null;
+    rescore();
+  }
+
+  function rescore() {
+    results.forEach(function (r) { if (!r.invalid) r.d = decide(r, state.settings); });
+    save();
+    render();
+  }
+
+  var RANK = { buy: 0, maybe: 1, skip: 2 };
+  var LABEL = { buy: "Buy", maybe: "Maybe", skip: "Skip" };
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function barColor(v) { return v >= 0.7 ? "var(--buy)" : v >= 0.45 ? "var(--maybe)" : "var(--skip)"; }
+
+  function render() {
+    var valid = results.filter(function (r) { return !r.invalid; });
+    var counts = { buy: 0, maybe: 0, skip: 0 };
+    valid.forEach(function (r) { counts[r.d.verdict]++; });
+    $("summary").innerHTML = results.length ?
+      '<span class="chip buy">' + counts.buy + ' Buy</span><span class="chip maybe">' + counts.maybe +
+      ' Maybe</span><span class="chip skip">' + counts.skip + ' Skip</span><span class="chip total">' +
+      valid.length + ' checked</span>' : "";
+
+    var sorted = valid.slice().sort(function (a, b) {
+      var x, y;
+      if (sortKey === "domain") { x = a.f.domain; y = b.f.domain; return sortDir * (x < y ? -1 : x > y ? 1 : 0); }
+      if (sortKey === "verdict") { x = RANK[a.d.verdict]; y = RANK[b.d.verdict]; if (x !== y) return -sortDir * (x - y); }
+      return sortDir * (a.d.score - b.d.score);
+    });
+
+    var html = sorted.map(function (r) {
+      var f = r.f, j = r.j, d = r.d;
+      var meta = f.length + "L · " + (f.length <= 8 ? f.pattern : f.tld.toUpperCase()) +
+        (f.words ? " · " + f.words.join(" + ") : "");
+      var mini = FACTORS.map(function (x) {
+        return '<span>' + x.label.split(" ")[0] + ' <b>' + Math.round(j[x.key] * 100) + '</b></span>';
+      }).join("");
+      var row = '<tr class="row" data-d="' + esc(f.domain) + '" tabindex="0" aria-expanded="' + (openRow === f.domain) + '">' +
+        '<td><div class="dom">' + esc(f.domain) + '</div><div class="meta">' + esc(meta) + '</div></td>' +
+        '<td><span class="verdict ' + d.verdict + '">' + LABEL[d.verdict] + '</span></td>' +
+        '<td><div class="score"><b>' + d.score + '</b><div class="bar"><i style="width:' + d.score + '%;background:' +
+        barColor(d.score / 100) + '"></i></div></div></td>' +
+        '<td><div class="mini">' + mini + '</div></td>' +
+        '<td>' + esc(j.industry) + '</td></tr>';
+      if (openRow === f.domain) {
+        row += '<tr class="detail"><td colspan="5"><ul class="reasons">' + d.reasons.map(function (x) {
+          return '<li class="' + x[0] + '">' + esc(x[1]) + '</li>';
+        }).join("") + '</ul></td></tr>';
+      }
+      return row;
+    }).join("");
+
+    var bad = results.filter(function (r) { return r.invalid; });
+    if (bad.length) {
+      html += '<tr><td colspan="5" class="invalid">Not a valid domain, so skipped: ' +
+        bad.map(function (r) { return esc(r.raw); }).join(", ") + '</td></tr>';
+    }
+    if (!results.length) html = '<tr><td colspan="5" class="empty">Add some domains on the left and press Check domains.</td></tr>';
+    $("rows").innerHTML = html;
+
+    document.querySelectorAll("th.sortable").forEach(function (th) {
+      var arrow = th.dataset.sort === sortKey ? (sortDir < 0 ? " ↓" : " ↑") : "";
+      th.textContent = th.textContent.replace(/ [↑↓]$/, "") + arrow;
+    });
+  }
+
+  function toggle(tr) {
+    if (!tr || !tr.dataset.d) return;
+    openRow = openRow === tr.dataset.d ? null : tr.dataset.d;
+    render();
+  }
+
+  $("rows").addEventListener("click", function (e) { toggle(e.target.closest("tr.row")); });
+  $("rows").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(e.target.closest("tr.row")); }
+  });
+  document.querySelectorAll("th.sortable").forEach(function (th) {
+    th.addEventListener("click", function () {
+      if (sortKey === th.dataset.sort) sortDir = -sortDir;
+      else { sortKey = th.dataset.sort; sortDir = sortKey === "domain" ? 1 : -1; }
+      render();
+    });
+  });
+  $("run").addEventListener("click", run);
+  $("clear").addEventListener("click", function () { $("domains").value = ""; $("domains").focus(); run(); });
+  $("reset").addEventListener("click", function () { state.settings = Object.assign({}, DEFAULTS); syncSliders(); rescore(); });
+
+  buildSliders();
+  $("domains").value = state.list;
+  syncSliders();
+  run();
+})();
+</script>

@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Domain Scout</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -80,6 +85,7 @@ h1 {
 }
 h1 .dot { color: var(--accent); }
 .tagline { color: var(--ink-soft); margin: 4px 0 0; max-width: 60ch; }
+.mode.live { color: var(--accent); background: var(--accent-soft); }
 .mode {
   font-size: 13px;
   color: var(--maybe);
@@ -190,14 +196,15 @@ footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
 footer p { margin: 0 0 6px; }
 @media (prefers-reduced-motion: no-preference) { .bar i { transition: width .35s ease; } }
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <header>
     <div>
       <h1>Domain Scout<span class="dot">.</span></h1>
       <p class="tagline">Paste the names you're eyeing and get a Buy, Maybe or Skip call for each one, with the reasons behind it.</p>
     </div>
-    <span class="mode" title="Scores come from built-in rules. Connect Jev to replace them with AI judgments.">Demo scoring · Jev not connected</span>
+    <span class="mode" id="mode" role="status">Demo scoring · Jev not connected</span>
   </header>
 
   <div class="layout">
@@ -247,7 +254,7 @@ footer p { margin: 0 0 6px; }
 
   <footer>
     <p><b>How the score works:</b> every name is rated on brandability, how easy it is to say, its extension and whether it uses real words. Your sliders set how much each counts. A name that includes a famous brand is always a Skip, because of trademark risk.</p>
-    <p>These scores come from simple built-in rules and are a starting point, not a price estimate. Always check availability, recent sales of similar names and trademarks before buying.</p>
+    <p>When Jev is connected, it rates brandability, the radio test, trademark risk and the likely buyer. Extension and real words are always worked out by the page itself. If Jev can't be reached, simple built-in rules fill in. Either way the score is a starting point, not a price estimate: always check availability, recent sales of similar names and trademarks before buying.</p>
   </footer>
 </div>
 
@@ -410,8 +417,16 @@ footer p { margin: 0 0 6px; }
   }
 
   function reasons(item) {
-    var f = item.f, j = item.j, r = [];
-    if (j.trademark) r.push(["bad", "Contains the brand “" + j.trademark + "”. High trademark risk, so avoid it."]);
+    var f = item.f, j = item.j, r = [], jv = item.jev;
+    if (jv) {
+      var pct = function (x) { return Math.round(x * 100) + "%"; };
+      if (jv.trademark >= 0.5) r.push(["bad", "Jev: " + pct(jv.trademark) + " chance this imitates a well-known brand. Trademark risk, so avoid it."]);
+      else if (jv.trademark >= 0.2) r.push(["", "Jev: " + pct(jv.trademark) + " chance of a trademark problem. Check before buying."]);
+      r.push([jv.brand.value >= 0.6 ? "good" : jv.brand.value < 0.35 ? "bad" : "", "Jev brand rating: " + jv.brand.level + " (" + pct(jv.brand.confidence) + " sure)"]);
+      r.push([jv.say.value >= 0.66 ? "good" : jv.say.value < 0.34 ? "bad" : "", "Jev radio test: " + jv.say.level]);
+      r.push(["", "Jev's likely buyer: " + jv.industry + " (" + pct(jv.industryConfidence) + " sure)"]);
+    }
+    if (j.trademark && j.trademark !== "a well-known brand") r.push(["bad", "Contains the brand “" + j.trademark + "”. High trademark risk, so avoid it."]);
     if (f.length <= 5) r.push(["good", f.length + " letters. Short names are rare and valuable."]);
     else if (f.length >= 13) r.push(["bad", f.length + " characters is long and hard to remember."]);
     if (f.words && f.words.length === 1) r.push(["good", "A single dictionary word."]);
@@ -483,6 +498,57 @@ footer p { margin: 0 0 6px; }
       .map(evaluate);
     openRow = null;
     rescore();
+    askJev();
+  }
+
+  // ---------- Jev (via this site's server, which holds the API key) ----------
+  var request = 0;
+
+  function setMode(text, live) {
+    $("mode").textContent = text;
+    $("mode").classList.toggle("live", !!live);
+  }
+
+  function askJev() {
+    var mine = ++request;
+    var valid = results.filter(function (r) { return !r.invalid; });
+    if (!valid.length) return;
+    if (location.protocol === "file:") { setMode("Demo scoring · Jev not connected"); return; }
+    var batch = valid.slice(0, 50);
+    setMode("Asking Jev about " + batch.length + " domain" + (batch.length === 1 ? "" : "s") + "…");
+    fetch("api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domains: batch.map(function (r) { return r.f.domain; }) })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.error || "The server answered " + res.status + ".");
+        return body;
+      });
+    }).then(function (body) {
+      if (mine !== request) return;
+      var done = 0, failed = 0;
+      batch.forEach(function (r) {
+        var jv = body.results && body.results[r.f.domain];
+        if (jv && !jv.error) { applyJev(r, jv); done++; } else failed++;
+      });
+      var extra = valid.length > batch.length ? " (first 50 only)" : "";
+      setMode(done ? "Scored by Jev" + extra + (failed ? " · " + failed + " failed, shown with demo rules" : "") :
+        "Jev didn't answer · showing demo scoring", done > 0);
+      rescore();
+    }).catch(function (e) {
+      if (mine !== request) return;
+      setMode("Demo scoring · Jev not connected");
+      $("mode").title = e.message;
+    });
+  }
+
+  function applyJev(r, jv) {
+    r.jev = jv;
+    r.j.brand = jv.brand.value;
+    r.j.say = jv.say.value;
+    r.j.industry = jv.industry;
+    if (jv.trademark >= 0.5 && !r.j.trademark) r.j.trademark = "a well-known brand";
   }
 
   function rescore() {
@@ -577,3 +643,5 @@ footer p { margin: 0 0 6px; }
   run();
 })();
 </script>
+</body>
+</html>

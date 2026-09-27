@@ -1,22 +1,25 @@
 # Domain Scout
 
 Paste a list of domain names and get a **Buy / Maybe / Skip** call for each one,
-with the reasons behind it.
+with the reasons behind it. Brandability, the radio test, trademark risk and the
+likely buyer come from TypeSafe's Jev model. Extension and real words are worked
+out by the page itself.
 
-Open `index.html` in any web browser. Nothing to install.
+## Put it online with Vercel
 
-## How it scores a name
+1. Sign up at vercel.com with your GitHub account.
+2. Add New → Project → import the `zero_day` repository.
+3. Set **Root Directory** to `domain-scout`.
+4. Under **Environment Variables**, add `TYPESAFE_API_KEY` with your TypeSafe key.
+5. Click **Deploy**.
 
-- **Brandability**: short, clean, memorable names score higher.
-- **Easy to say**: passes the radio test (no long consonant runs, hyphens or numbers).
-- **Extension**: .com is strongest, then .ai, .io, .co and others.
-- **Real words**: one or two dictionary words beat coined names.
+The key stays on the server (`api/evaluate.js`) and is never sent to the browser.
 
-Sliders set how much each factor counts. A name that contains a famous brand is
-always a Skip because of trademark risk.
+## Files
 
-## Demo scoring
-
-The judgments currently come from simple built-in rules. They are meant to be
-replaced by TypeSafe's Jev model once an API key and network access are set up.
-Jev calls must run on a server so the API key stays private.
+- `index.html`: the page. If Jev can't be reached, it falls back to built-in rules
+  and says so in the badge at the top right.
+- `api/evaluate.js`: the server function that asks Jev
+  (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`). It asks four
+  questions per domain: brand (Score), say (Score), trademark (Noul) and industry
+  (Choice).

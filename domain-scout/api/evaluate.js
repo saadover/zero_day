@@ -1,0 +1,151 @@
+// Asks TypeSafe's Jev model to judge each domain. Runs on the server so the
+// API key never reaches the browser. Reads the key from TYPESAFE_API_KEY.
+
+const API_URL = process.env.TYPESAFE_API_URL || "https://api.typesafe.ai/v1/systemone";
+const MODEL = "jev-latest";
+const MAX_DOMAINS = 50;
+const PARALLEL = 5;
+
+const INDUSTRIES = {
+  "Finance": "Banking, payments, lending, investing, insurance or crypto.",
+  "Health & fitness": "Medicine, dental, wellness, fitness, diet or beauty.",
+  "Tech & AI": "Software, apps, AI, data, cloud, hosting or devices.",
+  "Real estate & home": "Property, rentals, home improvement, furniture or gardening.",
+  "Shopping": "Online stores, deals, marketplaces or retail products.",
+  "Travel": "Trips, hotels, flights, tourism or transport.",
+  "Food": "Restaurants, recipes, groceries, cafes or delivery.",
+  "Energy & green": "Solar, power, fuel, recycling or sustainability.",
+  "Media & creative": "Video, music, news, design, art or entertainment.",
+  "Education & jobs": "Schools, courses, tutoring, hiring or careers.",
+  "General": "No single industry stands out; the name could suit many kinds of business.",
+};
+
+function questions() {
+  return {
+    brand: {
+      type: "score",
+      instructions:
+        "As an experienced domain investor, rate how valuable `domain` would be as a brand name " +
+        "for a business that might buy it from you.",
+      criteria: [
+        "Unusable as a brand: long, spammy, awkward, confusing or clearly low quality.",
+        "Weak: generic or clunky; few businesses would build a brand on it.",
+        "Decent: a usable brand name with some clear drawbacks.",
+        "Strong: short, memorable and fits an obvious kind of business.",
+        "Premium: the kind of name established companies and startups pay thousands for.",
+      ],
+    },
+    say: {
+      type: "score",
+      instructions:
+        "Rate how easily a person who hears the name in `domain` said out loud once could say it " +
+        "and type it correctly (the radio test).",
+      criteria: [
+        "Fails: most people could not pronounce it or would misspell it.",
+        "Hard: many people would hesitate or misspell it.",
+        "Mostly fine: small spelling doubts, such as a homophone or unusual letter.",
+        "Passes: almost anyone would say and spell it correctly.",
+      ],
+    },
+    trademark: {
+      type: "noul",
+      instructions:
+        "Does `domain` contain or closely imitate the name of a well-known company, product or brand, " +
+        "so that registering it could infringe that brand's trademark?",
+    },
+    industry: {
+      type: "choice",
+      instructions: "Which kind of business would be the most likely buyer of `domain`?",
+      criteria: INDUSTRIES,
+    },
+  };
+}
+
+async function askJev(domain, key) {
+  const [name, ...rest] = domain.split(".");
+  const body = JSON.stringify({
+    state: { domain, name_part: name, extension: "." + rest.join(".") },
+    model: MODEL,
+    questions: questions(),
+  });
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+      body,
+    });
+    if ((res.status === 429 || res.status === 529) && attempt < 3) {
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const err = new Error("TypeSafe returned " + res.status + (text ? ": " + text.slice(0, 300) : ""));
+      err.status = res.status;
+      throw err;
+    }
+    return toJudgments((await res.json()).answers);
+  }
+}
+
+// Turns a Score answer into 0..1 using its own legend, whatever the level numbering.
+function unit(answer) {
+  const levels = Object.keys(answer.legend).map(Number).sort((a, b) => a - b);
+  const lo = levels[0], hi = levels[levels.length - 1];
+  const nearest = String(levels.reduce((a, b) => (Math.abs(b - answer.score) < Math.abs(a - answer.score) ? b : a)));
+  return {
+    value: hi > lo ? Math.max(0, Math.min(1, (answer.score - lo) / (hi - lo))) : 0,
+    level: answer.legend[nearest],
+    confidence: answer.confidence,
+  };
+}
+
+function toJudgments(a) {
+  return {
+    brand: unit(a.brand),
+    say: unit(a.say),
+    trademark: a.trademark.noul,
+    industry: a.industry.choice,
+    industryConfidence: a.industry.confidence,
+  };
+}
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Use POST." });
+    return;
+  }
+  const key = process.env.TYPESAFE_API_KEY;
+  if (!key) {
+    res.status(503).json({ error: "The TYPESAFE_API_KEY setting is missing on the server." });
+    return;
+  }
+  const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+  const domains = Array.isArray(body.domains) ? body.domains.filter((d) => typeof d === "string") : [];
+  if (!domains.length || domains.length > MAX_DOMAINS) {
+    res.status(400).json({ error: "Send between 1 and " + MAX_DOMAINS + " domains at a time." });
+    return;
+  }
+
+  const results = {};
+  let next = 0;
+  let fatal = null;
+  async function worker() {
+    while (next < domains.length && !fatal) {
+      const domain = domains[next++];
+      try {
+        results[domain] = await askJev(domain, key);
+      } catch (e) {
+        if (e.status === 401) fatal = "TypeSafe rejected the API key. Check TYPESAFE_API_KEY.";
+        results[domain] = { error: e.message };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, domains.length) }, worker));
+
+  if (fatal) {
+    res.status(502).json({ error: fatal });
+    return;
+  }
+  res.status(200).json({ model: MODEL, results });
+};

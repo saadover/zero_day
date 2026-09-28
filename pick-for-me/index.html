@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pick For Me</title>
-<meta name="description" content="Can't choose between two things? Answer a few questions and Jev picks for you, with the reasons why.">
+<meta name="description" content="Can't choose between two things? Answer a few questions and get a clear pick, with the reasons why.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -311,6 +311,14 @@ ul.why.give li::before { content: "–"; color: var(--give); }
   text-align: center;
   margin-top: 18px;
 }
+.question-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 28px 0 -18px;
+}
 </style>
 </head>
 <body>
@@ -322,13 +330,12 @@ ul.why.give li::before { content: "–"; color: var(--give); }
   </header>
 
   <main id="steps">
-    <!-- 0: the two options -->
     <section class="step" data-step="options">
-      <h1>Can't decide?<br><em>Let Jev pick.</em></h1>
-      <p class="lead">Write your two options. Answer a few questions. Get a decision and the reasons behind it.</p>
+      <h1>Can't decide?<br><em>We'll pick for you.</em></h1>
+      <p class="lead">Write your two options. Answer a few questions that fit your choice. Get a decision and the reasons behind it.</p>
       <div class="saved" id="savedBox" hidden>
         <span id="savedText"></span>
-        <button type="button" id="editProfile">Edit</button>
+        <button type="button" id="forget">Forget</button>
       </div>
       <label class="field"><span>What are you deciding? (optional)</span>
         <input type="text" id="question" maxlength="200" placeholder="e.g. Which job should I take?"></label>
@@ -337,95 +344,22 @@ ul.why.give li::before { content: "–"; color: var(--give); }
       <p class="or">or</p>
       <label class="field"><span>Option 2</span>
         <input type="text" id="optB" maxlength="200" placeholder="e.g. Move abroad for the new offer"></label>
+      <div class="error" id="optionsError" hidden></div>
       <div class="spacer"></div>
       <button class="primary" type="button" id="toQuestions" disabled>Next</button>
     </section>
 
-    <!-- 1: age -->
-    <section class="step" data-step="age">
-      <h1>How old are you?</h1>
-      <p class="lead">What's right at 18 isn't always right at 45.</p>
-      <label class="field"><span>Age</span>
-        <input type="number" id="age" inputmode="numeric" min="5" max="120" placeholder="e.g. 27"></label>
-      <div class="spacer"></div>
-      <button class="primary" type="button" data-next>Next</button>
-      <button class="secondary" type="button" data-skip>Skip</button>
-    </section>
-
-    <!-- 2: religion -->
-    <section class="step" data-step="religion">
-      <h1>What's your religion?</h1>
-      <p class="lead">So the decision respects what you believe. Pick one.</p>
-      <div class="chips" data-single="religion">
-        <button class="chip" type="button">Islam</button>
-        <button class="chip" type="button">Christianity</button>
-        <button class="chip" type="button">Judaism</button>
-        <button class="chip" type="button">Hinduism</button>
-        <button class="chip" type="button">Buddhism</button>
-        <button class="chip" type="button">Sikhism</button>
-        <button class="chip" type="button">Spiritual</button>
-        <button class="chip" type="button">Other</button>
-        <button class="chip" type="button">Not religious</button>
-        <button class="chip" type="button">Prefer not to say</button>
+    <section class="step" data-step="loading">
+      <div class="thinking">
+        <div class="coin">?</div>
+        <p class="lead" id="loadingText"></p>
       </div>
-      <div class="spacer"></div>
-      <button class="primary" type="button" data-next>Next</button>
     </section>
 
-    <!-- 3: priorities -->
-    <section class="step" data-step="priorities">
-      <h1>What matters most to you?</h1>
-      <p class="lead">Pick up to three.</p>
-      <div class="chips" data-multi="priorities" data-max="3">
-        <button class="chip" type="button">Family</button>
-        <button class="chip" type="button">Money</button>
-        <button class="chip" type="button">Career</button>
-        <button class="chip" type="button">Health</button>
-        <button class="chip" type="button">Happiness</button>
-        <button class="chip" type="button">Faith</button>
-        <button class="chip" type="button">Freedom</button>
-        <button class="chip" type="button">Security</button>
-        <button class="chip" type="button">Adventure</button>
-        <button class="chip" type="button">Learning</button>
-        <button class="chip" type="button">Friends</button>
-        <button class="chip" type="button">Love</button>
-      </div>
-      <p class="hint" id="prioHint"></p>
-      <div class="spacer"></div>
-      <button class="primary" type="button" data-next>Next</button>
-    </section>
+    <!-- The questions for this decision are added here. -->
 
-    <!-- 4: budget -->
-    <section class="step" data-step="budget">
-      <h1>How's your money situation?</h1>
-      <p class="lead">Be honest. Nobody else sees this.</p>
-      <div class="chips stack" data-single="budget">
-        <button class="chip" type="button" data-value="Tight">Tight<small>Every bit counts right now</small></button>
-        <button class="chip" type="button" data-value="Okay">Okay<small>I can handle some costs</small></button>
-        <button class="chip" type="button" data-value="Comfortable">Comfortable<small>Money isn't the main worry</small></button>
-      </div>
-      <div class="spacer"></div>
-      <button class="primary" type="button" data-next>Next</button>
-      <button class="secondary" type="button" data-skip>Skip</button>
-    </section>
-
-    <!-- 5: risk -->
-    <section class="step" data-step="risk">
-      <h1>Safe or bold?</h1>
-      <p class="lead">When life gives you a choice, you usually…</p>
-      <div class="chips stack" data-single="risk">
-        <button class="chip" type="button" data-value="Plays it safe">Play it safe<small>I prefer what I know</small></button>
-        <button class="chip" type="button" data-value="Balanced">Somewhere in between<small>A little risk is fine</small></button>
-        <button class="chip" type="button" data-value="Takes chances">Take chances<small>Big risks, big rewards</small></button>
-      </div>
-      <div class="spacer"></div>
-      <button class="primary" type="button" data-next>Next</button>
-      <button class="secondary" type="button" data-skip>Skip</button>
-    </section>
-
-    <!-- 6: notes -->
-    <section class="step" data-step="notes">
-      <h1>Anything else Jev should know?</h1>
+    <section class="step" data-step="notes" id="notesStep">
+      <h1>Anything else we should know?</h1>
       <p class="lead">Deadlines, who else is affected, what worries you. Optional.</p>
       <label class="field"><span>About your situation</span>
         <textarea id="notes" maxlength="600" placeholder="e.g. My parents live near my current job, and the new offer pays 30% more."></textarea></label>
@@ -433,53 +367,52 @@ ul.why.give li::before { content: "–"; color: var(--give); }
       <button class="primary" type="button" id="decide">Decide for me</button>
     </section>
 
-    <!-- 7: thinking -->
-    <section class="step" data-step="thinking">
-      <div class="thinking">
-        <div class="coin">?</div>
-        <p class="lead">Jev is weighing your options…</p>
-      </div>
-    </section>
-
-    <!-- 8: result -->
     <section class="step" data-step="result">
       <div id="result"></div>
       <div class="spacer"></div>
       <button class="primary" type="button" id="again">Decide something else</button>
-      <button class="secondary" type="button" id="retry">Ask Jev again</button>
+      <button class="secondary" type="button" id="retry">Try again</button>
       <p class="install">On iPhone: tap Share, then “Add to Home Screen” to keep Pick For Me as an app.</p>
     </section>
   </main>
 </div>
 
 <script>
-const PROFILE_KEY = "pickforme.profile";
-const FLOW = ["options", "age", "religion", "priorities", "budget", "risk", "notes"];
-const steps = [...document.querySelectorAll(".step")];
+// Answers about the person (age, diet…) are kept on the phone so they are
+// asked only once. Answers about one decision (mood, timing…) are not.
+const SAVED_KEY = "pickforme.saved";
 const $ = (id) => document.getElementById(id);
 
-let profile = { age: "", religion: "", priorities: [], budget: "", risk: "" };
-let flow = FLOW;
+let saved = {};
+let questions = [];   // this decision's questions, from the server
+let answers = {};     // this decision's answers, saved ones included
+let flow = ["options"];
 let at = "options";
-let editing = false;
 
-function loadProfile() {
+function loadSaved() {
   try {
-    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
-    if (saved && typeof saved === "object") Object.assign(profile, saved);
+    const s = JSON.parse(localStorage.getItem(SAVED_KEY) || "null");
+    if (s && typeof s === "object") saved = s;
   } catch (e) { /* storage unavailable */ }
 }
-function saveProfile() {
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch (e) { /* storage unavailable */ }
+function storeSaved() {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
 }
-function hasProfile() { return Boolean(profile.religion); }
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function steps() { return [...document.querySelectorAll(".step")]; }
 
 function show(name) {
   at = name;
-  steps.forEach((s) => s.classList.toggle("on", s.dataset.step === name));
+  steps().forEach((s) => s.classList.toggle("on", s.dataset.step === name));
   const i = flow.indexOf(name);
   $("back").classList.toggle("show", i > 0);
-  const pct = name === "result" || name === "thinking" ? 100 : ((i + 1) / (flow.length + 1)) * 100;
+  const pct = i < 0 ? 100 : ((i + 1) / (flow.length + 1)) * 100;
   $("bar").style.width = pct + "%";
   window.scrollTo(0, 0);
   if (name === "options") renderSaved();
@@ -488,116 +421,163 @@ function next() {
   const i = flow.indexOf(at);
   if (i >= 0 && i < flow.length - 1) show(flow[i + 1]);
 }
-
-// Options step
-function optionsReady() {
-  return $("optA").value.trim() && $("optB").value.trim();
+function loading(text) {
+  $("loadingText").textContent = text;
+  show("loading");
 }
+
+function decision() {
+  return { question: $("question").value, option_a: $("optA").value, option_b: $("optB").value };
+}
+async function post(url, payload) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error || "Something went wrong on our side. Please try again in a moment." };
+    return data;
+  } catch (e) {
+    return { error: "Couldn't connect. Check your internet and try again." };
+  }
+}
+
+// Step 1: the two options
+function optionsReady() { return $("optA").value.trim() && $("optB").value.trim(); }
 ["optA", "optB"].forEach((id) => $(id).addEventListener("input", () => { $("toQuestions").disabled = !optionsReady(); }));
-$("toQuestions").addEventListener("click", () => {
-  // With saved answers, go straight to the per-decision notes.
-  flow = hasProfile() && !editing ? ["options", "notes"] : FLOW;
-  next();
-});
+
 function renderSaved() {
-  const box = $("savedBox");
-  box.hidden = !hasProfile() || editing;
-  if (box.hidden) return;
-  const bits = [profile.age ? profile.age + " yrs" : null, profile.religion, profile.priorities.join(", ")].filter(Boolean);
-  $("savedText").textContent = "Using your answers: " + bits.join(" · ");
+  const n = Object.keys(saved).length;
+  $("savedBox").hidden = !n;
+  $("savedText").textContent = "Remembering " + n + " thing" + (n === 1 ? "" : "s") + " about you";
 }
-$("editProfile").addEventListener("click", () => {
-  editing = true;
-  flow = FLOW;
-  if (optionsReady()) show("age");
-  else renderSaved();
+$("forget").addEventListener("click", () => {
+  saved = {};
+  storeSaved();
+  renderSaved();
 });
 
-// Age
-$("age").addEventListener("input", (e) => { profile.age = e.target.value; });
-
-// Single-choice chips
-document.querySelectorAll("[data-single]").forEach((group) => {
-  const field = group.dataset.single;
-  group.querySelectorAll(".chip").forEach((chip) => {
-    const value = chip.dataset.value || chip.textContent.trim();
-    chip.addEventListener("click", () => {
-      profile[field] = value;
-      syncChips();
-      setTimeout(next, 180);
-    });
-  });
+$("toQuestions").addEventListener("click", async () => {
+  $("optionsError").hidden = true;
+  loading("Working out what to ask you…");
+  const data = await post("api/questions", { decision: decision() });
+  if (data.error) {
+    show("options");
+    $("optionsError").textContent = data.error;
+    $("optionsError").hidden = false;
+    return;
+  }
+  buildQuestions(data.questions);
+  show(flow[1]);
 });
 
-// Multi-choice chips
-document.querySelectorAll("[data-multi]").forEach((group) => {
-  const field = group.dataset.multi;
-  const max = Number(group.dataset.max) || 99;
-  group.querySelectorAll(".chip").forEach((chip) => {
-    const value = chip.textContent.trim();
-    chip.addEventListener("click", () => {
-      const list = profile[field];
-      const i = list.indexOf(value);
-      if (i >= 0) list.splice(i, 1);
-      else if (list.length < max) list.push(value);
-      $("prioHint").textContent = list.length >= max ? "That's three. Tap one to swap it." : "";
-      syncChips();
-    });
-  });
-});
-
-function syncChips() {
-  document.querySelectorAll("[data-single]").forEach((group) => {
-    group.querySelectorAll(".chip").forEach((chip) => {
-      const value = chip.dataset.value || chip.textContent.trim();
-      chip.setAttribute("aria-pressed", String(profile[group.dataset.single] === value));
-    });
-  });
-  document.querySelectorAll("[data-multi]").forEach((group) => {
-    group.querySelectorAll(".chip").forEach((chip) => {
-      chip.setAttribute("aria-pressed", String(profile[group.dataset.multi].includes(chip.textContent.trim())));
-    });
-  });
-  $("age").value = profile.age;
+// Step 2: the questions picked for this decision
+function label(option) {
+  const text = Array.isArray(option) ? option[0] : option;
+  return text === "{a}" ? $("optA").value.trim() : text === "{b}" ? $("optB").value.trim() : text;
 }
 
-document.querySelectorAll("[data-next]").forEach((b) => b.addEventListener("click", () => {
-  if (at === "religion" && !profile.religion) profile.religion = "Prefer not to say";
-  next();
-}));
-document.querySelectorAll("[data-skip]").forEach((b) => b.addEventListener("click", () => {
-  if (at === "age") profile.age = "";
-  else profile[at] = "";
-  syncChips();
-  next();
-}));
+function buildQuestions(list) {
+  document.querySelectorAll(".step[data-question]").forEach((s) => s.remove());
+  questions = list;
+  answers = {};
+  const ask = [];
+  for (const q of list) {
+    if (q.remember && saved[q.id] != null) answers[q.id] = saved[q.id];
+    else ask.push(q);
+  }
+  ask.forEach((q, i) => $("notesStep").before(questionStep(q, i + 1, ask.length)));
+  flow = ["options", ...ask.map((q) => q.id), "notes"];
+}
+
+function questionStep(q, n, total) {
+  const s = el("section", "step");
+  s.dataset.step = q.id;
+  s.dataset.question = "";
+  s.appendChild(el("p", "question-count", "Question " + n + " of " + total));
+  s.appendChild(el("h1", null, q.title));
+  s.appendChild(el("p", "lead", q.lead));
+
+  const nextBtn = el("button", "primary", "Next");
+  nextBtn.type = "button";
+  nextBtn.addEventListener("click", next);
+
+  if (q.type === "number" || q.type === "text") {
+    const f = el("label", "field");
+    const input = el(q.type === "text" ? "textarea" : "input");
+    if (q.type === "number") {
+      input.type = "number";
+      input.inputMode = "numeric";
+      input.min = 5;
+      input.max = 120;
+    } else {
+      input.maxLength = 400;
+    }
+    input.addEventListener("input", () => setAnswer(q, input.value.trim() || undefined));
+    f.appendChild(input);
+    s.appendChild(f);
+  } else {
+    const group = el("div", "chips" + (q.type === "stack" ? " stack" : ""));
+    const hint = el("p", "hint");
+    for (const o of q.options) {
+      const value = label(o);
+      const chip = el("button", "chip", value);
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", "false");
+      if (Array.isArray(o)) chip.appendChild(el("small", null, o[1]));
+      chip.addEventListener("click", () => {
+        if (q.type === "multi") {
+          const list = (answers[q.id] || []).slice();
+          const i = list.indexOf(value);
+          if (i >= 0) list.splice(i, 1);
+          else if (list.length < (q.max || 99)) list.push(value);
+          hint.textContent = q.max && list.length >= q.max ? "That's the most you can pick. Tap one to swap it." : "";
+          setAnswer(q, list.length ? list : undefined);
+        } else {
+          setAnswer(q, value);
+          setTimeout(next, 180);
+        }
+        group.querySelectorAll(".chip").forEach((c) => {
+          const v = c.firstChild.textContent;
+          const a = answers[q.id];
+          c.setAttribute("aria-pressed", String(Array.isArray(a) ? a.includes(v) : a === v));
+        });
+      });
+      group.appendChild(chip);
+    }
+    s.appendChild(group);
+    s.appendChild(hint);
+  }
+  s.appendChild(el("div", "spacer"));
+  if (q.type !== "single" && q.type !== "stack") s.appendChild(nextBtn);
+  const skip = el("button", "secondary", "Skip");
+  skip.type = "button";
+  skip.addEventListener("click", next);
+  s.appendChild(skip);
+  return s;
+}
+
+function setAnswer(q, value) {
+  if (value === undefined) delete answers[q.id];
+  else answers[q.id] = value;
+  if (q.remember) {
+    if (value === undefined) delete saved[q.id];
+    else saved[q.id] = value;
+    storeSaved();
+  }
+}
+
 $("back").addEventListener("click", () => {
   const i = flow.indexOf(at);
   if (i > 0) show(flow[i - 1]);
 });
 
-// Deciding
+// Step 3: the decision
 async function decide() {
-  if (!profile.religion) profile.religion = "Prefer not to say";
-  editing = false;
-  saveProfile();
-  show("thinking");
-  const payload = {
-    decision: { question: $("question").value, option_a: $("optA").value, option_b: $("optB").value },
-    person: { ...profile, notes: $("notes").value },
-  };
-  let data;
-  try {
-    const res = await fetch("api/decide", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    data = await res.json().catch(() => ({ error: "The server sent an unreadable answer (" + res.status + ")." }));
-    if (!res.ok && !data.error) data.error = "The server answered " + res.status + ".";
-  } catch (e) {
-    data = { error: "Couldn't reach the server. Check your connection and try again." };
-  }
+  loading("Weighing your options…");
+  const data = await post("api/decide", { decision: decision(), answers, notes: $("notes").value });
   renderResult(data);
   show("result");
 }
@@ -606,16 +586,11 @@ $("retry").addEventListener("click", decide);
 $("again").addEventListener("click", () => {
   ["question", "optA", "optB", "notes"].forEach((id) => { $(id).value = ""; });
   $("toQuestions").disabled = true;
-  flow = FLOW;
+  document.querySelectorAll(".step[data-question]").forEach((s) => s.remove());
+  flow = ["options"];
   show("options");
 });
 
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
-}
 function list(items, cls) {
   const ul = el("ul", cls);
   items.forEach((t) => ul.appendChild(el("li", null, t)));
@@ -625,9 +600,8 @@ function list(items, cls) {
 function renderResult(data) {
   const box = $("result");
   box.replaceChildren();
-  $("retry").hidden = false;
   if (data.error) {
-    box.appendChild(el("h1", null, "Jev couldn't decide"));
+    box.appendChild(el("h1", null, "Couldn't decide"));
     box.appendChild(el("div", "error", data.error));
     return;
   }
@@ -651,7 +625,7 @@ function renderResult(data) {
 
   box.appendChild(el("h2", null, "Why"));
   if (data.reasons.length) box.appendChild(list(data.reasons, "why"));
-  else box.appendChild(el("p", "empty", "The two were close on every point; Jev's overall judgement tipped it."));
+  else box.appendChild(el("p", "empty", "The two were close on every point. Taken all together, this one comes out ahead."));
 
   if (data.tradeoffs.length) {
     box.appendChild(el("h2", null, "What “" + data.other + "” had going for it"));
@@ -659,8 +633,7 @@ function renderResult(data) {
   }
 }
 
-loadProfile();
-syncChips();
+loadSaved();
 show("options");
 </script>
 </body>

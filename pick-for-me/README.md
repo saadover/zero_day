@@ -1,12 +1,14 @@
 # Pick For Me
 
-Can't choose between two things? Write both options, answer a few questions
-(age, religion, what matters most, money situation, appetite for risk,
-anything else), and TypeSafe's Jev model picks one for you, with bullet points
-saying why and what the other option had going for it.
+Can't choose between two things? Write both options and the app asks only the
+questions that matter for that choice. Pizza or burger gets asked about diet
+and mood, not religion. Beer or juice does get asked about religion. Then it
+picks one, with bullet points saying why and what the other option had going
+for it. Jev is never named in the app.
 
-Your answers about yourself are saved on your phone, so the next decision only
-asks for the two options.
+Answers about the person (age, diet, religion, work…) are saved on the phone
+and not asked again; answers about one decision (mood, timing, who's coming)
+are asked each time. **Forget** on the first screen clears them.
 
 ## Put it online with Vercel
 
@@ -22,16 +24,18 @@ The key stays on the server (`api/decide.js`) and is never sent to the phone.
 Open the Vercel link in Safari, tap **Share**, then **Add to Home Screen**. It
 opens full screen with its own icon, like an App Store app.
 
-## How Jev decides
+## How it works
 
-`api/decide.js` makes one Jev request per decision
-(`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with nine
-Choice questions:
+Every question the app can ask lives in `lib/questions.js`, with a note on when
+it matters and the Jev question that compares the options on its answer.
 
-- `pick`: which option the person should choose. Its probability is the
-  "% sure" on the result screen.
-- Eight factors, each answered "option 1", "option 2" or "even": what matters
-  most to them, faith and values, age, money, risk, five years from now,
-  day-to-day happiness, and regret. Factors where Jev's pick wins become the
-  **Why** bullets; factors where the other option wins are listed under what
-  it had going for it. Factors the person skipped are left out.
+1. `api/questions.js`: one Jev request (Score questions) rating how much each
+   question would help with these two options. The most useful ones are asked,
+   up to 6 and at least 2. Religion is asked only when Jev rates it essential.
+2. `api/decide.js`: one Jev request (Choice questions): `pick`, plus one
+   comparison per answered question and three general ones (long run,
+   happiness, regret). Comparisons that favour the pick become the **Why**
+   bullets; the rest are listed under what the other option had going for it.
+
+Both use `lib/jev.js` (`POST https://api.typesafe.ai/v1/systemone`, model
+`jev-latest`). Jev errors go to the Vercel logs; the app shows a plain message.

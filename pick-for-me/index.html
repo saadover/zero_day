@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pick For Me</title>
+<meta name="description" content="Can't choose between two things? Answer a few questions and Jev picks for you, with the reasons why.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pick For Me">
+<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root {
+  --ink: #1d1a16;
+  --ink-soft: #6b645a;
+  --paper: #f6f3ee;
+  --panel: #ffffff;
+  --line: #e4ddd2;
+  --accent: #d2502c;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe4dc;
+  --good: #227447;
+  --good-bg: #e0f1e6;
+  --give: #8a5a00;
+  --give-bg: #f8ecd2;
+  --display: "Fraunces", Georgia, serif;
+  --body: "Inter", -apple-system, "SF Pro Text", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #f1ece4;
+    --ink-soft: #a89f92;
+    --paper: #16130f;
+    --panel: #221e19;
+    --line: #373029;
+    --accent: #f07350;
+    --accent-ink: #1d1a16;
+    --accent-soft: #43251b;
+    --good: #7bd49d;
+    --good-bg: #1b3325;
+    --give: #f0bf5a;
+    --give-bg: #3b2e14;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f1ece4;
+  --ink-soft: #a89f92;
+  --paper: #16130f;
+  --panel: #221e19;
+  --line: #373029;
+  --accent: #f07350;
+  --accent-ink: #1d1a16;
+  --accent-soft: #43251b;
+  --good: #7bd49d;
+  --good-bg: #1b3325;
+  --give: #f0bf5a;
+  --give-bg: #3b2e14;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.5 var(--body);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 12px) 20px calc(env(safe-area-inset-bottom) + 20px);
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.back {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 17px var(--body);
+  padding: 8px 4px;
+  margin-left: -4px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.back.show { visibility: visible; }
+.progress {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width .3s ease;
+}
+.brand {
+  font: 800 15px var(--display);
+  letter-spacing: .01em;
+}
+main { flex: 1; display: flex; flex-direction: column; }
+.step { display: none; flex: 1; flex-direction: column; animation: in .25s ease; }
+.step.on { display: flex; }
+@keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+h1 {
+  font: 800 32px/1.1 var(--display);
+  margin: 28px 0 8px;
+  letter-spacing: -.01em;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.lead { color: var(--ink-soft); margin: 0 0 24px; }
+label.field { display: block; margin-bottom: 16px; }
+label.field span {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+input[type=text], input[type=number], textarea {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font: 17px var(--body);
+  outline: none;
+  -webkit-appearance: none;
+}
+input:focus, textarea:focus { border-color: var(--accent); }
+textarea { min-height: 120px; resize: vertical; }
+.or {
+  text-align: center;
+  font: 600 13px var(--display);
+  color: var(--ink-soft);
+  margin: -6px 0 10px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chips.stack { flex-direction: column; }
+.chip {
+  border: 1.5px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 11px 18px;
+  font: 500 16px var(--body);
+  cursor: pointer;
+  min-height: 44px;
+}
+.chips.stack .chip { border-radius: 14px; text-align: left; padding: 14px 18px; }
+.chips.stack .chip small { display: block; color: var(--ink-soft); font-size: 14px; font-weight: 400; }
+.chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.hint { font-size: 14px; color: var(--ink-soft); margin: 12px 0 0; }
+.spacer { flex: 1; min-height: 24px; }
+.primary {
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 17px var(--body);
+  padding: 16px;
+  min-height: 54px;
+  cursor: pointer;
+}
+.primary:disabled { opacity: .4; cursor: default; }
+.secondary {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 16px var(--body);
+  padding: 14px;
+  margin-top: 6px;
+  cursor: pointer;
+}
+.saved {
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.saved[hidden] { display: none; }
+.saved button {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 600 15px var(--body);
+  cursor: pointer;
+  padding: 6px 0;
+  flex: none;
+}
+.thinking {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+}
+.coin {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  font: 800 34px var(--display);
+  animation: flip 1.2s ease-in-out infinite;
+}
+@keyframes flip { 0%, 100% { transform: rotateY(0); } 50% { transform: rotateY(180deg); } }
+@media (prefers-reduced-motion: reduce) { .coin, .step { animation: none; } }
+.verdict {
+  background: var(--panel);
+  border: 1.5px solid var(--line);
+  border-radius: 22px;
+  padding: 22px 20px;
+  margin-top: 20px;
+}
+.verdict .label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-soft);
+}
+.verdict .pick {
+  font: 800 34px/1.1 var(--display);
+  color: var(--accent);
+  margin: 6px 0 10px;
+  overflow-wrap: anywhere;
+}
+.verdict .over { color: var(--ink-soft); font-size: 15px; overflow-wrap: anywhere; }
+.meter { margin-top: 16px; }
+.meter .bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.meter .bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.meter p { margin: 6px 0 0; font-size: 14px; color: var(--ink-soft); }
+h2 {
+  font: 600 20px var(--display);
+  margin: 26px 0 10px;
+}
+ul.why { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+ul.why li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--good-bg);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+}
+ul.why li::before {
+  content: "✓";
+  font-weight: 700;
+  color: var(--good);
+  flex: none;
+}
+ul.why.give li { background: var(--give-bg); }
+ul.why.give li::before { content: "–"; color: var(--give); }
+.empty { color: var(--ink-soft); font-size: 15px; margin: 0; }
+.error {
+  background: var(--accent-soft);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-top: 24px;
+  font-size: 15px;
+}
+.install {
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-top: 18px;
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <button class="back" id="back" type="button">‹ Back</button>
+    <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+    <span class="brand">Pick For Me</span>
+  </header>
+
+  <main id="steps">
+    <!-- 0: the two options -->
+    <section class="step" data-step="options">
+      <h1>Can't decide?<br><em>Let Jev pick.</em></h1>
+      <p class="lead">Write your two options. Answer a few questions. Get a decision and the reasons behind it.</p>
+      <div class="saved" id="savedBox" hidden>
+        <span id="savedText"></span>
+        <button type="button" id="editProfile">Edit</button>
+      </div>
+      <label class="field"><span>What are you deciding? (optional)</span>
+        <input type="text" id="question" maxlength="200" placeholder="e.g. Which job should I take?"></label>
+      <label class="field"><span>Option 1</span>
+        <input type="text" id="optA" maxlength="200" placeholder="e.g. Stay in my current job"></label>
+      <p class="or">or</p>
+      <label class="field"><span>Option 2</span>
+        <input type="text" id="optB" maxlength="200" placeholder="e.g. Move abroad for the new offer"></label>
+      <div class="spacer"></div>
+      <button class="primary" type="button" id="toQuestions" disabled>Next</button>
+    </section>
+
+    <!-- 1: age -->
+    <section class="step" data-step="age">
+      <h1>How old are you?</h1>
+      <p class="lead">What's right at 18 isn't always right at 45.</p>
+      <label class="field"><span>Age</span>
+        <input type="number" id="age" inputmode="numeric" min="5" max="120" placeholder="e.g. 27"></label>
+      <div class="spacer"></div>
+      <button class="primary" type="button" data-next>Next</button>
+      <button class="secondary" type="button" data-skip>Skip</button>
+    </section>
+
+    <!-- 2: religion -->
+    <section class="step" data-step="religion">
+      <h1>What's your religion?</h1>
+      <p class="lead">So the decision respects what you believe. Pick one.</p>
+      <div class="chips" data-single="religion">
+        <button class="chip" type="button">Islam</button>
+        <button class="chip" type="button">Christianity</button>
+        <button class="chip" type="button">Judaism</button>
+        <button class="chip" type="button">Hinduism</button>
+        <button class="chip" type="button">Buddhism</button>
+        <button class="chip" type="button">Sikhism</button>
+        <button class="chip" type="button">Spiritual</button>
+        <button class="chip" type="button">Other</button>
+        <button class="chip" type="button">Not religious</button>
+        <button class="chip" type="button">Prefer not to say</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="primary" type="button" data-next>Next</button>
+    </section>
+
+    <!-- 3: priorities -->
+    <section class="step" data-step="priorities">
+      <h1>What matters most to you?</h1>
+      <p class="lead">Pick up to three.</p>
+      <div class="chips" data-multi="priorities" data-max="3">
+        <button class="chip" type="button">Family</button>
+        <button class="chip" type="button">Money</button>
+        <button class="chip" type="button">Career</button>
+        <button class="chip" type="button">Health</button>
+        <button class="chip" type="button">Happiness</button>
+        <button class="chip" type="button">Faith</button>
+        <button class="chip" type="button">Freedom</button>
+        <button class="chip" type="button">Security</button>
+        <button class="chip" type="button">Adventure</button>
+        <button class="chip" type="button">Learning</button>
+        <button class="chip" type="button">Friends</button>
+        <button class="chip" type="button">Love</button>
+      </div>
+      <p class="hint" id="prioHint"></p>
+      <div class="spacer"></div>
+      <button class="primary" type="button" data-next>Next</button>
+    </section>
+
+    <!-- 4: budget -->
+    <section class="step" data-step="budget">
+      <h1>How's your money situation?</h1>
+      <p class="lead">Be honest. Nobody else sees this.</p>
+      <div class="chips stack" data-single="budget">
+        <button class="chip" type="button" data-value="Tight">Tight<small>Every bit counts right now</small></button>
+        <button class="chip" type="button" data-value="Okay">Okay<small>I can handle some costs</small></button>
+        <button class="chip" type="button" data-value="Comfortable">Comfortable<small>Money isn't the main worry</small></button>
+      </div>
+      <div class="spacer"></div>
+      <button class="primary" type="button" data-next>Next</button>
+      <button class="secondary" type="button" data-skip>Skip</button>
+    </section>
+
+    <!-- 5: risk -->
+    <section class="step" data-step="risk">
+      <h1>Safe or bold?</h1>
+      <p class="lead">When life gives you a choice, you usually…</p>
+      <div class="chips stack" data-single="risk">
+        <button class="chip" type="button" data-value="Plays it safe">Play it safe<small>I prefer what I know</small></button>
+        <button class="chip" type="button" data-value="Balanced">Somewhere in between<small>A little risk is fine</small></button>
+        <button class="chip" type="button" data-value="Takes chances">Take chances<small>Big risks, big rewards</small></button>
+      </div>
+      <div class="spacer"></div>
+      <button class="primary" type="button" data-next>Next</button>
+      <button class="secondary" type="button" data-skip>Skip</button>
+    </section>
+
+    <!-- 6: notes -->
+    <section class="step" data-step="notes">
+      <h1>Anything else Jev should know?</h1>
+      <p class="lead">Deadlines, who else is affected, what worries you. Optional.</p>
+      <label class="field"><span>About your situation</span>
+        <textarea id="notes" maxlength="600" placeholder="e.g. My parents live near my current job, and the new offer pays 30% more."></textarea></label>
+      <div class="spacer"></div>
+      <button class="primary" type="button" id="decide">Decide for me</button>
+    </section>
+
+    <!-- 7: thinking -->
+    <section class="step" data-step="thinking">
+      <div class="thinking">
+        <div class="coin">?</div>
+        <p class="lead">Jev is weighing your options…</p>
+      </div>
+    </section>
+
+    <!-- 8: result -->
+    <section class="step" data-step="result">
+      <div id="result"></div>
+      <div class="spacer"></div>
+      <button class="primary" type="button" id="again">Decide something else</button>
+      <button class="secondary" type="button" id="retry">Ask Jev again</button>
+      <p class="install">On iPhone: tap Share, then “Add to Home Screen” to keep Pick For Me as an app.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+const PROFILE_KEY = "pickforme.profile";
+const FLOW = ["options", "age", "religion", "priorities", "budget", "risk", "notes"];
+const steps = [...document.querySelectorAll(".step")];
+const $ = (id) => document.getElementById(id);
+
+let profile = { age: "", religion: "", priorities: [], budget: "", risk: "" };
+let flow = FLOW;
+let at = "options";
+let editing = false;
+
+function loadProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
+    if (saved && typeof saved === "object") Object.assign(profile, saved);
+  } catch (e) { /* storage unavailable */ }
+}
+function saveProfile() {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch (e) { /* storage unavailable */ }
+}
+function hasProfile() { return Boolean(profile.religion); }
+
+function show(name) {
+  at = name;
+  steps.forEach((s) => s.classList.toggle("on", s.dataset.step === name));
+  const i = flow.indexOf(name);
+  $("back").classList.toggle("show", i > 0);
+  const pct = name === "result" || name === "thinking" ? 100 : ((i + 1) / (flow.length + 1)) * 100;
+  $("bar").style.width = pct + "%";
+  window.scrollTo(0, 0);
+  if (name === "options") renderSaved();
+}
+function next() {
+  const i = flow.indexOf(at);
+  if (i >= 0 && i < flow.length - 1) show(flow[i + 1]);
+}
+
+// Options step
+function optionsReady() {
+  return $("optA").value.trim() && $("optB").value.trim();
+}
+["optA", "optB"].forEach((id) => $(id).addEventListener("input", () => { $("toQuestions").disabled = !optionsReady(); }));
+$("toQuestions").addEventListener("click", () => {
+  // With saved answers, go straight to the per-decision notes.
+  flow = hasProfile() && !editing ? ["options", "notes"] : FLOW;
+  next();
+});
+function renderSaved() {
+  const box = $("savedBox");
+  box.hidden = !hasProfile() || editing;
+  if (box.hidden) return;
+  const bits = [profile.age ? profile.age + " yrs" : null, profile.religion, profile.priorities.join(", ")].filter(Boolean);
+  $("savedText").textContent = "Using your answers: " + bits.join(" · ");
+}
+$("editProfile").addEventListener("click", () => {
+  editing = true;
+  flow = FLOW;
+  if (optionsReady()) show("age");
+  else renderSaved();
+});
+
+// Age
+$("age").addEventListener("input", (e) => { profile.age = e.target.value; });
+
+// Single-choice chips
+document.querySelectorAll("[data-single]").forEach((group) => {
+  const field = group.dataset.single;
+  group.querySelectorAll(".chip").forEach((chip) => {
+    const value = chip.dataset.value || chip.textContent.trim();
+    chip.addEventListener("click", () => {
+      profile[field] = value;
+      syncChips();
+      setTimeout(next, 180);
+    });
+  });
+});
+
+// Multi-choice chips
+document.querySelectorAll("[data-multi]").forEach((group) => {
+  const field = group.dataset.multi;
+  const max = Number(group.dataset.max) || 99;
+  group.querySelectorAll(".chip").forEach((chip) => {
+    const value = chip.textContent.trim();
+    chip.addEventListener("click", () => {
+      const list = profile[field];
+      const i = list.indexOf(value);
+      if (i >= 0) list.splice(i, 1);
+      else if (list.length < max) list.push(value);
+      $("prioHint").textContent = list.length >= max ? "That's three. Tap one to swap it." : "";
+      syncChips();
+    });
+  });
+});
+
+function syncChips() {
+  document.querySelectorAll("[data-single]").forEach((group) => {
+    group.querySelectorAll(".chip").forEach((chip) => {
+      const value = chip.dataset.value || chip.textContent.trim();
+      chip.setAttribute("aria-pressed", String(profile[group.dataset.single] === value));
+    });
+  });
+  document.querySelectorAll("[data-multi]").forEach((group) => {
+    group.querySelectorAll(".chip").forEach((chip) => {
+      chip.setAttribute("aria-pressed", String(profile[group.dataset.multi].includes(chip.textContent.trim())));
+    });
+  });
+  $("age").value = profile.age;
+}
+
+document.querySelectorAll("[data-next]").forEach((b) => b.addEventListener("click", () => {
+  if (at === "religion" && !profile.religion) profile.religion = "Prefer not to say";
+  next();
+}));
+document.querySelectorAll("[data-skip]").forEach((b) => b.addEventListener("click", () => {
+  if (at === "age") profile.age = "";
+  else profile[at] = "";
+  syncChips();
+  next();
+}));
+$("back").addEventListener("click", () => {
+  const i = flow.indexOf(at);
+  if (i > 0) show(flow[i - 1]);
+});
+
+// Deciding
+async function decide() {
+  if (!profile.religion) profile.religion = "Prefer not to say";
+  editing = false;
+  saveProfile();
+  show("thinking");
+  const payload = {
+    decision: { question: $("question").value, option_a: $("optA").value, option_b: $("optB").value },
+    person: { ...profile, notes: $("notes").value },
+  };
+  let data;
+  try {
+    const res = await fetch("api/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    data = await res.json().catch(() => ({ error: "The server sent an unreadable answer (" + res.status + ")." }));
+    if (!res.ok && !data.error) data.error = "The server answered " + res.status + ".";
+  } catch (e) {
+    data = { error: "Couldn't reach the server. Check your connection and try again." };
+  }
+  renderResult(data);
+  show("result");
+}
+$("decide").addEventListener("click", decide);
+$("retry").addEventListener("click", decide);
+$("again").addEventListener("click", () => {
+  ["question", "optA", "optB", "notes"].forEach((id) => { $(id).value = ""; });
+  $("toQuestions").disabled = true;
+  flow = FLOW;
+  show("options");
+});
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function list(items, cls) {
+  const ul = el("ul", cls);
+  items.forEach((t) => ul.appendChild(el("li", null, t)));
+  return ul;
+}
+
+function renderResult(data) {
+  const box = $("result");
+  box.replaceChildren();
+  $("retry").hidden = false;
+  if (data.error) {
+    box.appendChild(el("h1", null, "Jev couldn't decide"));
+    box.appendChild(el("div", "error", data.error));
+    return;
+  }
+  box.appendChild(el("h1", null, "Decision made."));
+  const card = el("div", "verdict");
+  card.appendChild(el("div", "label", "Go with"));
+  card.appendChild(el("div", "pick", data.choice));
+  card.appendChild(el("div", "over", "over " + data.other));
+  if (typeof data.probability === "number") {
+    const pct = Math.round(data.probability * 100);
+    const meter = el("div", "meter");
+    const bar = el("div", "bar");
+    const fill = el("i");
+    fill.style.width = pct + "%";
+    bar.appendChild(fill);
+    meter.appendChild(bar);
+    meter.appendChild(el("p", null, pct >= 75 ? pct + "% sure: a clear call." : pct >= 60 ? pct + "% sure: a solid lean." : pct + "% sure: close, but this one edges it."));
+    card.appendChild(meter);
+  }
+  box.appendChild(card);
+
+  box.appendChild(el("h2", null, "Why"));
+  if (data.reasons.length) box.appendChild(list(data.reasons, "why"));
+  else box.appendChild(el("p", "empty", "The two were close on every point; Jev's overall judgement tipped it."));
+
+  if (data.tradeoffs.length) {
+    box.appendChild(el("h2", null, "What “" + data.other + "” had going for it"));
+    box.appendChild(list(data.tradeoffs, "why give"));
+  }
+}
+
+loadProfile();
+syncChips();
+show("options");
+</script>
+</body>
+</html>

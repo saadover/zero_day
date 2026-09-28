@@ -13,8 +13,7 @@ const TIMEOUT_MS = 8000;
 
 // Fallback whois servers for when a registry's RDAP lookup is missing or fails.
 const WHOIS_SERVERS = { com: "whois.verisign-grs.com", ai: "whois.nic.ai" };
-const NOT_FOUND = /no match|not found|no object found|no data found|no entries found/i;
-const FOUND = /domain name:|registrar:|creation date:|created:/i;
+const NOT_FOUND = /^\s*(no match for|not found|domain not found|no object found|no data found|no entries found)/im;
 
 let rdapServices = null;
 
@@ -42,8 +41,11 @@ function whois(host, query) {
   });
 }
 
-// Returns "available", "taken" or "unknown". An RDAP 404 means no one has
-// registered the name; a registry may still price it as premium.
+// Returns { status, source } where status is "available", "taken" or
+// "unknown". A name only counts as available on a clear "not registered"
+// answer; anything unclear is "unknown" so it never reaches Jev by mistake.
+// An RDAP 404 means no one has registered the name; a registry may still
+// price it as premium.
 async function availability(domain) {
   const tld = domain.slice(domain.indexOf(".") + 1);
   try {
@@ -53,22 +55,25 @@ async function availability(domain) {
         headers: { Accept: "application/rdap+json" },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      if (res.status === 404) return "available";
-      if (res.ok) return "taken";
+      const source = "registry RDAP (" + new URL(base).hostname + ")";
+      if (res.status === 404) return { status: "available", source };
+      if (res.ok) return { status: "taken", source };
     }
   } catch (e) {
     // fall through to whois
   }
   if (WHOIS_SERVERS[tld]) {
     try {
-      const text = await whois(WHOIS_SERVERS[tld], domain);
-      if (NOT_FOUND.test(text)) return "available";
-      if (FOUND.test(text)) return "taken";
+      const source = "whois (" + WHOIS_SERVERS[tld] + ")";
+      const text = await whois(WHOIS_SERVERS[tld], tld === "com" ? "domain " + domain : domain);
+      const escaped = domain.replace(/[.]/g, "\\.");
+      if (new RegExp("^\\s*domain name:\\s*" + escaped + "\\s*$", "im").test(text)) return { status: "taken", source };
+      if (NOT_FOUND.test(text)) return { status: "available", source };
     } catch (e) {
       // unknown
     }
   }
-  return "unknown";
+  return { status: "unknown", source: "no registry answered clearly" };
 }
 
 const INDUSTRIES = {
@@ -194,7 +199,8 @@ module.exports = async function handler(req, res) {
   async function worker() {
     while (next < domains.length && !fatal) {
       const domain = domains[next++];
-      const entry = { availability: await availability(domain) };
+      const check = await availability(domain);
+      const entry = { availability: check.status, checkedWith: check.source };
       if (entry.availability === "available" && key) {
         try {
           Object.assign(entry, await askJev(domain, key));

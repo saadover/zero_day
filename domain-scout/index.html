@@ -584,6 +584,7 @@ footer p { margin: 0 0 6px; }
 
   function applyAnswer(r, a) {
     r.status = a.availability;
+    r.checkedWith = a.checkedWith;
     if (a.brand && !a.error) {
       r.jev = a;
       r.j.brand = a.brand.value;
@@ -654,6 +655,7 @@ footer p { margin: 0 0 6px; }
         var st = STATUS[r.status];
         row = head + '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>';
         lines = [["", st[2]]];
+        if (r.checkedWith) lines.push(["", "Checked with " + r.checkedWith + "."]);
       } else {
         var mini = FACTORS.map(function (x) {
           return '<span>' + x.label.split(" ")[0] + ' <b>' + Math.round(j[x.key] * 100) + '</b></span>';
@@ -665,6 +667,7 @@ footer p { margin: 0 0 6px; }
           '<td>' + esc(j.industry) + '</td></tr>';
         lines = (r.status === "available" ? [["good", "Available: nobody has registered it. Confirm the price at your registrar."]] :
           [["", "Availability not checked in this demo."]]).concat(d.reasons);
+        if (r.checkedWith) lines.splice(1, 0, ["", "Checked with " + r.checkedWith + "."]);
         if (r.status === "available" && !r.jev) lines.push(["", "Jev didn't rate this one, so the built-in rules were used."]);
       }
       if (open) {

@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kickoff Call</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root {
+  --ink: #141c24;
+  --ink-soft: #56626c;
+  --paper: #f2f4f1;
+  --panel: #ffffff;
+  --line: #dde2dc;
+  --accent: #1f7a3c;
+  --accent-soft: #e0f0e4;
+  --home: #1f7a3c;
+  --draw: #8a8f94;
+  --away: #2b5fa8;
+  --win: #1f7a3c;
+  --win-bg: #e0f0e4;
+  --lose: #b3362d;
+  --lose-bg: #f8e1de;
+  --drawn-bg: #e9ebed;
+  --track: #e7ebe6;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #e6ece8; --ink-soft: #9aa8a0; --paper: #0e1512; --panel: #16201b; --line: #26332c;
+    --accent: #5cc97f; --accent-soft: #1a3324; --home: #5cc97f; --draw: #8d969b; --away: #6f9fe6;
+    --win: #6fd694; --win-bg: #183424; --lose: #f08a82; --lose-bg: #3d1c1a; --drawn-bg: #2a3330; --track: #24302a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e6ece8; --ink-soft: #9aa8a0; --paper: #0e1512; --panel: #16201b; --line: #26332c;
+  --accent: #5cc97f; --accent-soft: #1a3324; --home: #5cc97f; --draw: #8d969b; --away: #6f9fe6;
+  --win: #6fd694; --win-bg: #183424; --lose: #f08a82; --lose-bg: #3d1c1a; --drawn-bg: #2a3330; --track: #24302a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; padding: 0 16px; padding-block: 24px 48px; }
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 20px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(32px, 5vw, 44px); letter-spacing: 0.01em; text-transform: uppercase; margin: 0; line-height: 1; }
+h1 span { color: var(--accent); }
+.tagline { color: var(--ink-soft); margin: 6px 0 0; max-width: 60ch; }
+.record { font-size: 14px; font-weight: 600; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab { font: inherit; font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; padding: 6px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft); cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.subtabs { display: flex; gap: 20px; border-bottom: 1px solid var(--line); }
+.subtab { font: inherit; font-weight: 600; background: none; border: 0; border-bottom: 3px solid transparent; padding: 6px 2px; color: var(--ink-soft); cursor: pointer; }
+.subtab[aria-selected="true"] { color: var(--ink); border-color: var(--accent); }
+button:focus-visible, .match:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { color: var(--ink-soft); font-size: 13px; margin: 0; }
+.error { background: var(--lose-bg); color: var(--lose); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+.list { display: grid; gap: 10px; }
+.match { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer; display: grid; gap: 4px; }
+.match:hover { border-color: var(--accent); }
+.when { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.side { display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.side.away { justify-content: flex-end; text-align: right; }
+.side img { width: 26px; height: 26px; object-fit: contain; flex: none; }
+.side span { overflow-wrap: anywhere; }
+.vs { font-family: var(--display); font-size: 20px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.pickline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+.pill { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 8px; }
+.pill.home { color: var(--home); background: var(--accent-soft); }
+.pill.draw { color: var(--ink); background: var(--drawn-bg); }
+.pill.away { color: var(--away); background: color-mix(in srgb, var(--away) 14%, transparent); }
+.pill.right { color: var(--win); background: var(--win-bg); }
+.pill.wrong { color: var(--lose); background: var(--lose-bg); }
+.detail { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 12px; display: grid; gap: 14px; cursor: default; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 560px) { .compare { grid-template-columns: 1fr; } }
+.compare h3 { font-family: var(--display); font-size: 17px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 6px; }
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 14px; }
+.facts dt { color: var(--ink-soft); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.form { display: inline-flex; gap: 3px; vertical-align: middle; }
+.form b { width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: var(--mono); }
+.form .W { background: var(--win-bg); color: var(--win); }
+.form .D { background: var(--drawn-bg); color: var(--ink-soft); }
+.form .L { background: var(--lose-bg); color: var(--lose); }
+.absent { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-soft); }
+.predict { font: inherit; font-weight: 600; background: var(--accent); color: var(--panel); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; justify-self: start; }
+.predict:hover { filter: brightness(1.08); }
+.predict[disabled] { opacity: 0.6; cursor: wait; }
+.odds { display: grid; gap: 6px; }
+.oddrow { display: grid; grid-template-columns: 110px 1fr 48px; align-items: center; gap: 10px; font-size: 14px; }
+.oddrow.pick { font-weight: 700; }
+.bar { height: 10px; background: var(--track); border-radius: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 5px; }
+.oddrow b { font-family: var(--mono); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.why { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-soft); }
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; min-width: 520px; font-size: 14px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+td.team { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+td.team img { width: 20px; height: 20px; object-fit: contain; }
+.num { text-align: right; }
+footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
+footer p { margin: 0 0 6px; }
+@media (prefers-reduced-motion: no-preference) { .bar i { transition: width .4s ease; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Kickoff <span>Call</span></h1>
+      <p class="tagline">Upcoming matches with form, home and away records, streaks and missing players. Press Predict and Jev calls home win, draw or away win.</p>
+    </div>
+    <span class="record" id="record" title="Predictions made in this browser, checked against final scores">No predictions checked yet</span>
+  </header>
+
+  <div class="tabs" role="tablist" id="leagues"></div>
+  <div class="subtabs" role="tablist" id="views">
+    <button class="subtab" role="tab" data-view="upcoming" aria-selected="true">Upcoming</button>
+    <button class="subtab" role="tab" data-view="results" aria-selected="false">Results</button>
+    <button class="subtab" role="tab" data-view="table" aria-selected="false">Table</button>
+  </div>
+  <div id="content" aria-live="polite"></div>
+  <p class="note" id="updated"></p>
+
+  <footer>
+    <p><b>How it works:</b> match data comes from API-Football and is refreshed at most every 6 hours to stay inside your daily request limit. Jev is only asked when you press Predict, and each prediction is saved in this browser so you don't pay for the same one twice.</p>
+    <p>Once a predicted match is played, its result shows ✓ or ✗ under Results, and your hit rate appears at the top. Football is unpredictable: even bookmakers pick the right result only about half the time. Treat these calls as a second opinion, and only bet what you can afford to lose.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var LEAGUES = [{ id: 39, name: "Premier League" }, { id: 140, name: "La Liga" }, { id: 61, name: "Ligue 1" }];
+  var OUTCOME = { home_win: "Home win", draw: "Draw", away_win: "Away win" };
+  var COLOR = { home_win: "var(--home)", draw: "var(--draw)", away_win: "var(--away)" };
+  var PILL = { home_win: "home", draw: "draw", away_win: "away" };
+  var STORE = "kickoff-call-v1";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+
+  var ui = load();
+  var cache = {};        // league id -> data from /api/matches
+  var open = null;       // fixture id shown expanded
+  var busy = {};         // fixture id -> true while Jev is asked
+  var failed = {};       // fixture id -> error message
+
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(STORE) || "null");
+      if (s && s.predictions) return s;
+    } catch (e) {}
+    return { league: 39, view: "upcoming", predictions: {} };
+  }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(ui)); } catch (e) {} }
+
+  // ---------- data ----------
+  function fetchLeague(id) {
+    if (cache[id]) { render(); return; }
+    if (location.protocol === "file:") {
+      $("content").innerHTML = '<p class="error">Open this page from your Vercel site. Match data needs the server.</p>';
+      return;
+    }
+    $("content").innerHTML = '<p class="note">Loading ' + esc(nameOf(id)) + '…</p>';
+    fetch("api/matches?league=" + id).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.error || "The server answered " + res.status + ".");
+        return body;
+      });
+    }).then(function (data) {
+      cache[id] = data;
+      if (ui.league === id) render();
+      updateRecord();
+    }).catch(function (e) {
+      if (ui.league === id) $("content").innerHTML = '<p class="error">Couldn\'t load matches: ' + esc(e.message) + '</p>';
+    });
+  }
+
+  function predict(match) {
+    busy[match.id] = true; delete failed[match.id]; render();
+    fetch("api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: nameOf(ui.league), match: match })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.error || "The server answered " + res.status + ".");
+        return body;
+      });
+    }).then(function (p) {
+      ui.predictions[match.id] = {
+        pick: p.outcome.pick, probabilities: p.outcome.probabilities, confidence: p.outcome.confidence,
+        motivation: p.motivation, absences: p.absences, at: new Date().toISOString(),
+        home: match.home.name, away: match.away.name, league: ui.league
+      };
+      save();
+    }).catch(function (e) {
+      failed[match.id] = e.message;
+    }).then(function () {
+      delete busy[match.id];
+      render();
+    });
+  }
+
+  // ---------- helpers ----------
+  function nameOf(id) { return (LEAGUES.filter(function (l) { return l.id === id; })[0] || {}).name; }
+  function when(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + " · " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  function form(letters) {
+    if (!letters) return '<span class="note">No games yet</span>';
+    return '<span class="form">' + letters.split("").map(function (c) { return '<b class="' + c + '">' + c + '</b>'; }).join("") + '</span>';
+  }
+  function rec(r) { return r ? r.won + "W " + r.drawn + "D " + r.lost + "L" + (r.played ? " · " + r.scored + "–" + r.conceded + " goals" : "") : "—"; }
+  function logo(t) { return t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy">' : ""; }
+  function actual(goals) { return goals.home > goals.away ? "home_win" : goals.home < goals.away ? "away_win" : "draw"; }
+  function pct(x) { return Math.round((x || 0) * 100) + "%"; }
+
+  // ---------- rendering ----------
+  function renderTabs() {
+    $("leagues").innerHTML = LEAGUES.map(function (l) {
+      return '<button class="tab" role="tab" data-league="' + l.id + '" aria-selected="' + (l.id === ui.league) + '">' + esc(l.name) + '</button>';
+    }).join("");
+    document.querySelectorAll(".subtab").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.view === ui.view)); });
+  }
+
+  function render() {
+    renderTabs();
+    var data = cache[ui.league];
+    if (!data) return;
+    $("updated").textContent = data.league.name + " " + data.league.season + "/" + String(data.league.season + 1).slice(2) +
+      " · data from " + new Date(data.updated).toLocaleString();
+    if (ui.view === "upcoming") renderUpcoming(data);
+    else if (ui.view === "results") renderResults(data);
+    else renderTable(data);
+  }
+
+  function teamBlock(t, f, side) {
+    var venue = side === "home" ? "Home" : "Away";
+    var table = f.table ? f.table.position + " of " + f.table.of + " · " + f.table.points + " pts" + (f.table.zone ? " · " + f.table.zone : "") : "—";
+    var absent = f.absent.length ? '<ul class="absent">' + f.absent.map(function (a) {
+      return '<li>' + esc(a.player) + ': ' + esc(a.reason || "") + (a.status === "Questionable" ? " (doubtful)" : "") + '</li>';
+    }).join("") + '</ul>' : '<span class="note">None reported</span>';
+    return '<div><h3>' + esc(t.name) + '</h3><dl class="facts">' +
+      '<dt>Table</dt><dd>' + esc(table) + '</dd>' +
+      '<dt>Last 5</dt><dd>' + form(f.form_last5) + '</dd>' +
+      '<dt>Last 5 ' + venue.toLowerCase() + '</dt><dd>' + form(f[side + "_form_last5"]) + '</dd>' +
+      '<dt>Season</dt><dd>' + esc(rec(f.season_record)) + '</dd>' +
+      '<dt>' + venue + '</dt><dd>' + esc(rec(f[side + "_record"])) + '</dd>' +
+      (f.streaks.length ? '<dt>Streaks</dt><dd>' + esc(f.streaks.join("; ")) + '</dd>' : '') +
+      '<dt>Missing</dt><dd>' + absent + '</dd></dl></div>';
+  }
+
+  function predictionBlock(m, p) {
+    var rows = ["home_win", "draw", "away_win"].map(function (k) {
+      var label = k === "home_win" ? m.home.name : k === "away_win" ? m.away.name : "Draw";
+      var v = (p.probabilities || {})[k] || 0;
+      return '<div class="oddrow' + (p.pick === k ? " pick" : "") + '"><span>' + esc(label) + '</span>' +
+        '<div class="bar"><i style="width:' + Math.round(v * 100) + '%;background:' + COLOR[k] + '"></i></div><b>' + pct(v) + '</b></div>';
+    }).join("");
+    var why = ["Jev's call: " + OUTCOME[p.pick] + " (" + pct(p.confidence) + " sure)"];
+    if (p.motivation) {
+      why.push(m.home.name + ": " + p.motivation.home);
+      why.push(m.away.name + ": " + p.motivation.away);
+    }
+    if (p.absences) {
+      if (p.absences.home != null) why.push(pct(p.absences.home) + " chance " + m.home.name + "'s absences are key players");
+      if (p.absences.away != null) why.push(pct(p.absences.away) + " chance " + m.away.name + "'s absences are key players");
+    }
+    return '<div class="odds">' + rows + '</div><ul class="why">' + why.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join("") + '</ul>' +
+      '<p class="note">Predicted ' + esc(new Date(p.at).toLocaleString()) + '.</p>';
+  }
+
+  function renderUpcoming(data) {
+    if (!data.upcoming.length) { $("content").innerHTML = '<p class="note">No upcoming matches found for this league.</p>'; return; }
+    $("content").innerHTML = '<div class="list">' + data.upcoming.map(function (m) {
+      var p = ui.predictions[m.id];
+      var line = p ? '<span class="pill ' + PILL[p.pick] + '">' + OUTCOME[p.pick] + ' · ' + pct(p.probabilities[p.pick]) + '</span> Jev\'s call' :
+        'Tap to see the numbers and get a prediction';
+      var body = '';
+      if (open === m.id) {
+        body = '<div class="detail"><div class="compare">' + teamBlock(m.home, m.facts.home, "home") + teamBlock(m.away, m.facts.away, "away") + '</div>' +
+          (m.facts.head_to_head_this_season.length ? '<p class="note">This season: ' + esc(m.facts.head_to_head_this_season.join(" · ")) + '</p>' : '') +
+          (p ? predictionBlock(m, p) : '') +
+          (failed[m.id] ? '<p class="error">' + esc(failed[m.id]) + '</p>' : '') +
+          '<button class="predict" data-predict="' + m.id + '"' + (busy[m.id] ? ' disabled' : '') + '>' +
+          (busy[m.id] ? 'Asking Jev…' : p ? 'Predict again' : 'Predict with Jev') + '</button></div>';
+      }
+      return '<div class="match" tabindex="0" data-open="' + m.id + '" aria-expanded="' + (open === m.id) + '">' +
+        '<div class="when">' + esc(when(m.date)) + (m.round ? ' · ' + esc(m.round.replace("Regular Season - ", "Round ")) : '') + '</div>' +
+        '<div class="teams"><div class="side">' + logo(m.home) + '<span>' + esc(m.home.name) + '</span></div><div class="vs">vs</div>' +
+        '<div class="side away"><span>' + esc(m.away.name) + '</span>' + logo(m.away) + '</div></div>' +
+        '<div class="pickline">' + line + '</div>' + body + '</div>';
+    }).join("") + '</div>';
+  }
+
+  function renderResults(data) {
+    if (!data.results.length) { $("content").innerHTML = '<p class="note">No finished matches yet this season.</p>'; return; }
+    $("content").innerHTML = '<div class="list">' + data.results.map(function (r) {
+      var p = ui.predictions[r.id];
+      var verdict = p ? (p.pick === actual(r.goals) ?
+        '<span class="pill right">✓ Jev said ' + OUTCOME[p.pick] + '</span>' :
+        '<span class="pill wrong">✗ Jev said ' + OUTCOME[p.pick] + '</span>') : '';
+      return '<div class="match" style="cursor:default"><div class="when">' + esc(when(r.date)) + '</div>' +
+        '<div class="teams"><div class="side">' + logo(r.home) + '<span>' + esc(r.home.name) + '</span></div>' +
+        '<div class="vs">' + r.goals.home + ' – ' + r.goals.away + '</div>' +
+        '<div class="side away"><span>' + esc(r.away.name) + '</span>' + logo(r.away) + '</div></div>' +
+        (verdict ? '<div class="pickline">' + verdict + '</div>' : '') + '</div>';
+    }).join("") + '</div>';
+  }
+
+  function renderTable(data) {
+    $("content").innerHTML = '<div class="table-wrap"><table><thead><tr><th class="num">#</th><th>Team</th><th class="num">P</th>' +
+      '<th class="num">GD</th><th class="num">Pts</th><th>Form</th></tr></thead><tbody>' + data.table.map(function (r) {
+        return '<tr title="' + esc(r.zone || "") + '"><td class="num">' + r.position + '</td><td class="team">' + logo(r.team) + esc(r.team.name) + '</td>' +
+          '<td class="num">' + r.played + '</td><td class="num">' + (r.goal_difference > 0 ? "+" : "") + r.goal_difference + '</td>' +
+          '<td class="num"><b>' + r.points + '</b></td><td>' + form((r.form || "").slice(-5)) + '</td></tr>';
+      }).join("") + '</tbody></table></div>';
+  }
+
+  // Hit rate across every league loaded so far.
+  function updateRecord() {
+    var right = 0, total = 0;
+    Object.keys(cache).forEach(function (id) {
+      cache[id].results.forEach(function (r) {
+        var p = ui.predictions[r.id];
+        if (!p) return;
+        total++;
+        if (p.pick === actual(r.goals)) right++;
+      });
+    });
+    $("record").textContent = total ? "Jev's record: " + right + " of " + total + " right (" + Math.round(100 * right / total) + "%)" : "No predictions checked yet";
+  }
+
+  // ---------- events ----------
+  $("leagues").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-league]");
+    if (!b) return;
+    ui.league = Number(b.dataset.league); open = null; save();
+    renderTabs(); fetchLeague(ui.league);
+  });
+  $("views").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-view]");
+    if (!b) return;
+    ui.view = b.dataset.view; save(); render();
+  });
+  $("content").addEventListener("click", function (e) {
+    var p = e.target.closest("[data-predict]");
+    if (p) {
+      var id = Number(p.dataset.predict);
+      var m = cache[ui.league].upcoming.filter(function (x) { return x.id === id; })[0];
+      if (m) predict(m);
+      return;
+    }
+    if (e.target.closest(".detail")) return;
+    var card = e.target.closest("[data-open]");
+    if (card) { var cid = Number(card.dataset.open); open = open === cid ? null : cid; render(); }
+  });
+  $("content").addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-open]")) {
+      e.preventDefault(); var cid = Number(e.target.dataset.open); open = open === cid ? null : cid; render();
+    }
+  });
+
+  renderTabs();
+  fetchLeague(ui.league);
+})();
+</script>
+</body>
+</html>

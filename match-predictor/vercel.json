@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/matches.js": { "maxDuration": 60 },
+    "api/predict.js": { "maxDuration": 60 }
+  }
+}

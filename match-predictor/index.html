@@ -89,7 +89,6 @@ button:focus-visible, .match:focus-visible { outline: 2px solid var(--accent); o
 .form .W { background: var(--win-bg); color: var(--win); }
 .form .D { background: var(--drawn-bg); color: var(--ink-soft); }
 .form .L { background: var(--lose-bg); color: var(--lose); }
-.absent { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-soft); }
 .predict { font: inherit; font-weight: 600; background: var(--accent); color: var(--panel); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; justify-self: start; }
 .predict:hover { filter: brightness(1.08); }
 .predict[disabled] { opacity: 0.6; cursor: wait; }
@@ -118,7 +117,7 @@ footer p { margin: 0 0 6px; }
   <header>
     <div>
       <h1>Kickoff <span>Call</span></h1>
-      <p class="tagline">Upcoming matches with form, home and away records, streaks and missing players. Press Predict and Jev calls home win, draw or away win.</p>
+      <p class="tagline">Upcoming matches with form, home and away records, streaks and table situation. Press Predict and Jev calls home win, draw or away win.</p>
     </div>
     <span class="record" id="record" title="Predictions made in this browser, checked against final scores">No predictions checked yet</span>
   </header>
@@ -133,7 +132,7 @@ footer p { margin: 0 0 6px; }
   <p class="note" id="updated"></p>
 
   <footer>
-    <p><b>How it works:</b> match data comes from API-Football and is refreshed at most every 6 hours to stay inside your daily request limit. Jev is only asked when you press Predict, and each prediction is saved in this browser so you don't pay for the same one twice.</p>
+    <p><b>How it works:</b> match data comes from football-data.org and is refreshed at most every 6 hours. Injury news isn't included in their free plan, so Jev doesn't know about missing players. Jev is only asked when you press Predict, and each prediction is saved in this browser so you don't pay for the same one twice.</p>
     <p>Once a predicted match is played, its result shows ✓ or ✗ under Results, and your hit rate appears at the top. Football is unpredictable: even bookmakers pick the right result only about half the time. Treat these calls as a second opinion, and only bet what you can afford to lose.</p>
   </footer>
 </div>
@@ -141,11 +140,11 @@ footer p { margin: 0 0 6px; }
 <script>
 (function () {
   "use strict";
-  var LEAGUES = [{ id: 39, name: "Premier League" }, { id: 140, name: "La Liga" }, { id: 61, name: "Ligue 1" }];
+  var LEAGUES = [{ id: "PL", name: "Premier League" }, { id: "PD", name: "La Liga" }, { id: "FL1", name: "Ligue 1" }];
   var OUTCOME = { home_win: "Home win", draw: "Draw", away_win: "Away win" };
   var COLOR = { home_win: "var(--home)", draw: "var(--draw)", away_win: "var(--away)" };
   var PILL = { home_win: "home", draw: "draw", away_win: "away" };
-  var STORE = "kickoff-call-v1";
+  var STORE = "kickoff-call-v2";
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
@@ -161,7 +160,7 @@ footer p { margin: 0 0 6px; }
       var s = JSON.parse(localStorage.getItem(STORE) || "null");
       if (s && s.predictions) return s;
     } catch (e) {}
-    return { league: 39, view: "upcoming", predictions: {} };
+    return { league: "PL", view: "upcoming", predictions: {} };
   }
   function save() { try { localStorage.setItem(STORE, JSON.stringify(ui)); } catch (e) {} }
 
@@ -201,7 +200,7 @@ footer p { margin: 0 0 6px; }
     }).then(function (p) {
       ui.predictions[match.id] = {
         pick: p.outcome.pick, probabilities: p.outcome.probabilities, confidence: p.outcome.confidence,
-        motivation: p.motivation, absences: p.absences, at: new Date().toISOString(),
+        motivation: p.motivation, at: new Date().toISOString(),
         home: match.home.name, away: match.away.name, league: ui.league
       };
       save();
@@ -241,8 +240,8 @@ footer p { margin: 0 0 6px; }
     renderTabs();
     var data = cache[ui.league];
     if (!data) return;
-    $("updated").textContent = data.league.name + " " + data.league.season + "/" + String(data.league.season + 1).slice(2) +
-      " · data from " + new Date(data.updated).toLocaleString();
+    $("updated").textContent = data.league.name + (data.league.season ? " " + data.league.season + "/" + String(data.league.season + 1).slice(2) : "") +
+      " · data from football-data.org, fetched " + new Date(data.updated).toLocaleString();
     if (ui.view === "upcoming") renderUpcoming(data);
     else if (ui.view === "results") renderResults(data);
     else renderTable(data);
@@ -250,10 +249,8 @@ footer p { margin: 0 0 6px; }
 
   function teamBlock(t, f, side) {
     var venue = side === "home" ? "Home" : "Away";
-    var table = f.table ? f.table.position + " of " + f.table.of + " · " + f.table.points + " pts" + (f.table.zone ? " · " + f.table.zone : "") : "—";
-    var absent = f.absent.length ? '<ul class="absent">' + f.absent.map(function (a) {
-      return '<li>' + esc(a.player) + ': ' + esc(a.reason || "") + (a.status === "Questionable" ? " (doubtful)" : "") + '</li>';
-    }).join("") + '</ul>' : '<span class="note">None reported</span>';
+    var table = f.table ? f.table.position + " of " + f.table.of + " · " + f.table.points + " pts" +
+      (f.table.points_behind_leader > 0 ? " · " + f.table.points_behind_leader + " behind the leader" : f.table.position === 1 ? " · top" : "") : "—";
     return '<div><h3>' + esc(t.name) + '</h3><dl class="facts">' +
       '<dt>Table</dt><dd>' + esc(table) + '</dd>' +
       '<dt>Last 5</dt><dd>' + form(f.form_last5) + '</dd>' +
@@ -261,7 +258,7 @@ footer p { margin: 0 0 6px; }
       '<dt>Season</dt><dd>' + esc(rec(f.season_record)) + '</dd>' +
       '<dt>' + venue + '</dt><dd>' + esc(rec(f[side + "_record"])) + '</dd>' +
       (f.streaks.length ? '<dt>Streaks</dt><dd>' + esc(f.streaks.join("; ")) + '</dd>' : '') +
-      '<dt>Missing</dt><dd>' + absent + '</dd></dl></div>';
+      '</dl></div>';
   }
 
   function predictionBlock(m, p) {
@@ -275,10 +272,6 @@ footer p { margin: 0 0 6px; }
     if (p.motivation) {
       why.push(m.home.name + ": " + p.motivation.home);
       why.push(m.away.name + ": " + p.motivation.away);
-    }
-    if (p.absences) {
-      if (p.absences.home != null) why.push(pct(p.absences.home) + " chance " + m.home.name + "'s absences are key players");
-      if (p.absences.away != null) why.push(pct(p.absences.away) + " chance " + m.away.name + "'s absences are key players");
     }
     return '<div class="odds">' + rows + '</div><ul class="why">' + why.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join("") + '</ul>' +
       '<p class="note">Predicted ' + esc(new Date(p.at).toLocaleString()) + '.</p>';
@@ -349,7 +342,7 @@ footer p { margin: 0 0 6px; }
   $("leagues").addEventListener("click", function (e) {
     var b = e.target.closest("[data-league]");
     if (!b) return;
-    ui.league = Number(b.dataset.league); open = null; save();
+    ui.league = b.dataset.league; open = null; save();
     renderTabs(); fetchLeague(ui.league);
   });
   $("views").addEventListener("click", function (e) {

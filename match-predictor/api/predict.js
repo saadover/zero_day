@@ -1,7 +1,6 @@
 // POST /api/predict — asks Jev for a home win / draw / away win call on one
-// match, from the facts /api/matches computed. Also asks whether each side's
-// absences matter and how much each side has to play for. Reads the key from
-// TYPESAFE_API_KEY.
+// match, from the facts /api/matches computed, and how much each side has to
+// play for. Reads the key from TYPESAFE_API_KEY.
 
 const API_URL = process.env.TYPESAFE_API_URL || "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
@@ -12,14 +11,15 @@ const MOTIVATION = [
   "High stakes: chasing the title, a European place, or fighting relegation.",
 ];
 
-function questions(match) {
+function questions() {
   const q = {
     outcome: {
       type: "choice",
       instructions: {
         question:
-          "Considering form, home and away records, streaks, table positions, head-to-head results " +
-          "and missing players in `home` and `away`, what is the most likely full-time result of `match`?",
+          "Considering form, home and away records, streaks, table positions and head-to-head results " +
+          "in `home` and `away`, what is the most likely full-time result of `match`? Injury and " +
+          "suspension news is not included.",
       },
       criteria: {
         home_win: "The home team, `match.home`, wins.",
@@ -29,31 +29,19 @@ function questions(match) {
     },
     home_motivation: {
       type: "score",
-      instructions: "Given `home.table` and how far the season has gone, how much does `match.home` have to play for?",
+      instructions:
+        "Given `home.table` (position, points behind the leader, points above the bottom three) and how far " +
+        "the season has gone, how much does `match.home` have to play for?",
       criteria: MOTIVATION,
     },
     away_motivation: {
       type: "score",
-      instructions: "Given `away.table` and how far the season has gone, how much does `match.away` have to play for?",
+      instructions:
+        "Given `away.table` (position, points behind the leader, points above the bottom three) and how far " +
+        "the season has gone, how much does `match.away` have to play for?",
       criteria: MOTIVATION,
     },
   };
-  if (match.facts.home.absent.length) {
-    q.home_absences = {
-      type: "noul",
-      instructions:
-        "Do the players in `home.absent` include regular starters or key players whose absence would " +
-        "noticeably weaken `match.home`?",
-    };
-  }
-  if (match.facts.away.absent.length) {
-    q.away_absences = {
-      type: "noul",
-      instructions:
-        "Do the players in `away.absent` include regular starters or key players whose absence would " +
-        "noticeably weaken `match.away`?",
-    };
-  }
   return q;
 }
 
@@ -105,15 +93,11 @@ module.exports = async function handler(req, res) {
     head_to_head_this_season: m.facts.head_to_head_this_season,
   };
   try {
-    const a = await askJev(state, questions(m), key);
+    const a = await askJev(state, questions(), key);
     res.status(200).json({
       model: MODEL,
       outcome: { pick: a.outcome.choice, probabilities: a.outcome.probabilities, confidence: a.outcome.confidence },
       motivation: { home: level(a.home_motivation), away: level(a.away_motivation) },
-      absences: {
-        home: a.home_absences ? a.home_absences.noul : null,
-        away: a.away_absences ? a.away_absences.noul : null,
-      },
     });
   } catch (e) {
     res.status(502).json({ error: e.message });

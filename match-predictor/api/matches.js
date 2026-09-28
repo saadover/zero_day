@@ -1,18 +1,19 @@
-// GET /api/matches?league=39 — upcoming fixtures with facts, recent results
+// GET /api/matches?league=PL — upcoming fixtures with facts, recent results
 // and the table for one league. Vercel's edge cache keeps each answer for
-// 6 hours, so visitors share one set of API-Football requests (4 per league).
+// 6 hours, so visitors share one set of football-data.org requests (2 per
+// league).
 
 const { LEAGUES, buildLeague } = require("../lib/football.js");
 
 module.exports = async function handler(req, res) {
-  const league = Number(req.query.league);
+  const league = String(req.query.league || "");
   if (!LEAGUES[league]) {
     res.status(400).json({ error: "Unknown league. Use one of: " + Object.keys(LEAGUES).join(", ") + "." });
     return;
   }
-  const key = process.env.APIFOOTBALL_KEY;
+  const key = process.env.FOOTBALLDATA_KEY;
   if (!key) {
-    res.status(503).json({ error: "The APIFOOTBALL_KEY setting is missing on the server." });
+    res.status(503).json({ error: "The FOOTBALLDATA_KEY setting is missing on the server." });
     return;
   }
   try {

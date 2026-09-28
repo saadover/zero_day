@@ -197,6 +197,11 @@ tr.muted .dom { color: var(--ink-soft); text-decoration: line-through; }
 .chip.toggle { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
 .chip.toggle:hover { filter: brightness(0.95); }
 .dash { color: var(--ink-soft); }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.status.available { color: var(--buy); }
+.status.taken { color: var(--skip); }
+.status.unknown, .status.pending, .status.unchecked { color: var(--ink-soft); }
 footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
 footer p { margin: 0 0 6px; }
 @media (prefers-reduced-motion: no-preference) { .bar i { transition: width .35s ease; } }
@@ -244,6 +249,7 @@ footer p { margin: 0 0 6px; }
           <thead>
             <tr>
               <th class="sortable" data-sort="domain">Domain</th>
+              <th>Status</th>
               <th class="sortable" data-sort="verdict">Call</th>
               <th class="sortable" data-sort="score">Score</th>
               <th>Breakdown</th>
@@ -602,6 +608,8 @@ footer p { margin: 0 0 6px; }
 
   function barColor(v) { return v >= 0.7 ? "var(--buy)" : v >= 0.45 ? "var(--maybe)" : "var(--skip)"; }
 
+  var STATUS_LABEL = { available: "Available", taken: "Taken", unknown: "Couldn't check", pending: "Checking…", unchecked: "Not checked" };
+
   var STATUS = {
     pending: ["pending", "Checking…", "Looking this name up in its registry."],
     taken: ["taken", "Taken", "Already registered, so Jev wasn't asked about it."],
@@ -613,11 +621,13 @@ footer p { margin: 0 0 6px; }
     var counts = { buy: 0, maybe: 0, skip: 0, taken: 0, unknown: 0, pending: 0 };
     valid.forEach(function (r) { counts[scored(r) ? r.d.verdict : r.status]++; });
     var chips = [];
+    var availCount = valid.filter(function (r) { return r.status === "available"; }).length;
+    if (availCount) chips.push('<span class="chip total">' + availCount + ' available</span>');
     if (counts.buy + counts.maybe + counts.skip) chips.push('<span class="chip buy">' + counts.buy + ' Buy</span><span class="chip maybe">' +
       counts.maybe + ' Maybe</span><span class="chip skip">' + counts.skip + ' Skip</span>');
     if (counts.pending) chips.push('<span class="chip total">' + counts.pending + ' checking…</span>');
     if (counts.taken) chips.push('<button class="chip total toggle" id="takenToggle">' + counts.taken + ' taken · ' +
-      (showTaken ? "hide" : "show") + '</button>');
+      (showTaken ? "hide them" : "show them") + '</button>');
     if (counts.unknown) chips.push('<span class="chip total">' + counts.unknown + " couldn't check</span>");
     $("summary").innerHTML = chips.join("");
     if ($("takenToggle")) $("takenToggle").addEventListener("click", function () { showTaken = !showTaken; render(); });
@@ -637,12 +647,12 @@ footer p { margin: 0 0 6px; }
         (f.words ? " · " + f.words.join(" + ") : "");
       var head = '<tr class="row' + (r.status === "taken" ? " muted" : "") + '" data-d="' + esc(f.domain) +
         '" tabindex="0" aria-expanded="' + open + '"><td><div class="dom">' + esc(f.domain) +
-        '</div><div class="meta">' + esc(meta) + '</div></td>';
+        '</div><div class="meta">' + esc(meta) + '</div></td>' +
+        '<td><span class="status ' + r.status + '">' + STATUS_LABEL[r.status] + '</span></td>';
       var row, lines;
       if (!scored(r)) {
         var st = STATUS[r.status];
-        row = head + '<td><span class="verdict ' + st[0] + '">' + st[1] + '</span></td>' +
-          '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>';
+        row = head + '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>';
         lines = [["", st[2]]];
       } else {
         var mini = FACTORS.map(function (x) {
@@ -658,7 +668,7 @@ footer p { margin: 0 0 6px; }
         if (r.status === "available" && !r.jev) lines.push(["", "Jev didn't rate this one, so the built-in rules were used."]);
       }
       if (open) {
-        row += '<tr class="detail"><td colspan="5"><ul class="reasons">' + lines.map(function (x) {
+        row += '<tr class="detail"><td colspan="6"><ul class="reasons">' + lines.map(function (x) {
           return '<li class="' + x[0] + '">' + esc(x[1]) + '</li>';
         }).join("") + '</ul></td></tr>';
       }
@@ -667,11 +677,11 @@ footer p { margin: 0 0 6px; }
 
     var bad = results.filter(function (r) { return r.invalid; });
     if (bad.length) {
-      html += '<tr><td colspan="5" class="invalid">Not a valid domain, so skipped: ' +
+      html += '<tr><td colspan="6" class="invalid">Not a valid domain, so skipped: ' +
         bad.map(function (r) { return esc(r.raw); }).join(", ") + '</td></tr>';
     }
-    if (!results.length) html = '<tr><td colspan="5" class="empty">Add some names on the left and press Check domains.</td></tr>';
-    else if (!sorted.length && !bad.length) html = '<tr><td colspan="5" class="empty">Every name on your list is taken.</td></tr>';
+    if (!results.length) html = '<tr><td colspan="6" class="empty">Add some names on the left and press Check domains.</td></tr>';
+    else if (!sorted.length && !bad.length) html = '<tr><td colspan="6" class="empty">Every name on your list is taken.</td></tr>';
     $("rows").innerHTML = html;
 
     document.querySelectorAll("th.sortable").forEach(function (th) {
@@ -706,7 +716,7 @@ footer p { margin: 0 0 6px; }
   syncSliders();
   if (hasServer) {
     render();
-    $("rows").innerHTML = '<tr><td colspan="5" class="empty">Press <b>Check domains</b> to look up your list.</td></tr>';
+    $("rows").innerHTML = '<tr><td colspan="6" class="empty">Press <b>Check domains</b> to look up your list.</td></tr>';
   } else {
     run();
   }

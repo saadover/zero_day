@@ -1,10 +1,75 @@
-// Asks TypeSafe's Jev model to judge each domain. Runs on the server so the
-// API key never reaches the browser. Reads the key from TYPESAFE_API_KEY.
+// Checks whether each domain is already registered, then asks TypeSafe's Jev
+// model to judge only the available ones, so taken names cost no Jev usage.
+// Runs on the server so the API key never reaches the browser. Reads the key
+// from TYPESAFE_API_KEY.
+
+const net = require("net");
 
 const API_URL = process.env.TYPESAFE_API_URL || "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
 const MAX_DOMAINS = 50;
 const PARALLEL = 5;
+const TIMEOUT_MS = 8000;
+
+// Fallback whois servers for when a registry's RDAP lookup is missing or fails.
+const WHOIS_SERVERS = { com: "whois.verisign-grs.com", ai: "whois.nic.ai" };
+const NOT_FOUND = /no match|not found|no object found|no data found|no entries found/i;
+const FOUND = /domain name:|registrar:|creation date:|created:/i;
+
+let rdapServices = null;
+
+// IANA publishes which RDAP server answers for each extension.
+async function rdapBase(tld) {
+  if (!rdapServices) {
+    const res = await fetch("https://data.iana.org/rdap/dns.json", { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    rdapServices = (await res.json()).services;
+  }
+  const service = rdapServices.find(([tlds]) => tlds.includes(tld));
+  if (!service) return null;
+  const url = service[1].find((u) => u.startsWith("https")) || service[1][0];
+  return url.endsWith("/") ? url : url + "/";
+}
+
+function whois(host, query) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(43, host);
+    let out = "";
+    socket.setTimeout(TIMEOUT_MS, () => { socket.destroy(); reject(new Error("whois timeout")); });
+    socket.on("connect", () => socket.write(query + "\r\n"));
+    socket.on("data", (chunk) => { out += chunk; });
+    socket.on("end", () => resolve(out));
+    socket.on("error", reject);
+  });
+}
+
+// Returns "available", "taken" or "unknown". An RDAP 404 means no one has
+// registered the name; a registry may still price it as premium.
+async function availability(domain) {
+  const tld = domain.slice(domain.indexOf(".") + 1);
+  try {
+    const base = await rdapBase(tld);
+    if (base) {
+      const res = await fetch(base + "domain/" + encodeURIComponent(domain), {
+        headers: { Accept: "application/rdap+json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (res.status === 404) return "available";
+      if (res.ok) return "taken";
+    }
+  } catch (e) {
+    // fall through to whois
+  }
+  if (WHOIS_SERVERS[tld]) {
+    try {
+      const text = await whois(WHOIS_SERVERS[tld], domain);
+      if (NOT_FOUND.test(text)) return "available";
+      if (FOUND.test(text)) return "taken";
+    } catch (e) {
+      // unknown
+    }
+  }
+  return "unknown";
+}
 
 const INDUSTRIES = {
   "Finance": "Banking, payments, lending, investing, insurance or crypto.",
@@ -116,10 +181,6 @@ module.exports = async function handler(req, res) {
     return;
   }
   const key = process.env.TYPESAFE_API_KEY;
-  if (!key) {
-    res.status(503).json({ error: "The TYPESAFE_API_KEY setting is missing on the server." });
-    return;
-  }
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const domains = Array.isArray(body.domains) ? body.domains.filter((d) => typeof d === "string") : [];
   if (!domains.length || domains.length > MAX_DOMAINS) {
@@ -133,12 +194,16 @@ module.exports = async function handler(req, res) {
   async function worker() {
     while (next < domains.length && !fatal) {
       const domain = domains[next++];
-      try {
-        results[domain] = await askJev(domain, key);
-      } catch (e) {
-        if (e.status === 401) fatal = "TypeSafe rejected the API key. Check TYPESAFE_API_KEY.";
-        results[domain] = { error: e.message };
+      const entry = { availability: await availability(domain) };
+      if (entry.availability === "available" && key) {
+        try {
+          Object.assign(entry, await askJev(domain, key));
+        } catch (e) {
+          if (e.status === 401) fatal = "TypeSafe rejected the API key. Check TYPESAFE_API_KEY.";
+          entry.error = e.message;
+        }
       }
+      results[domain] = entry;
     }
   }
   await Promise.all(Array.from({ length: Math.min(PARALLEL, domains.length) }, worker));
@@ -147,5 +212,5 @@ module.exports = async function handler(req, res) {
     res.status(502).json({ error: fatal });
     return;
   }
-  res.status(200).json({ model: MODEL, results });
+  res.status(200).json({ model: MODEL, jev: Boolean(key), results });
 };

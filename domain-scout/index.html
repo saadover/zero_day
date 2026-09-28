@@ -192,6 +192,11 @@ tr.row:hover td { background: var(--accent-soft); }
 .detail td { background: var(--paper); }
 .empty { padding: 28px; text-align: center; color: var(--ink-soft); }
 .invalid { color: var(--skip); font-size: 13px; }
+.verdict.taken, .verdict.unknown, .verdict.pending { color: var(--ink-soft); background: var(--bar-track); }
+tr.muted .dom { color: var(--ink-soft); text-decoration: line-through; }
+.chip.toggle { border: 0; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; }
+.chip.toggle:hover { filter: brightness(0.95); }
+.dash { color: var(--ink-soft); }
 footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
 footer p { margin: 0 0 6px; }
 @media (prefers-reduced-motion: no-preference) { .bar i { transition: width .35s ease; } }
@@ -202,18 +207,18 @@ footer p { margin: 0 0 6px; }
   <header>
     <div>
       <h1>Domain Scout<span class="dot">.</span></h1>
-      <p class="tagline">Paste the names you're eyeing and get a Buy, Maybe or Skip call for each one, with the reasons behind it.</p>
+      <p class="tagline">Paste the names you're eyeing. Domain Scout drops the ones already taken, then Jev gives each available one a Buy, Maybe or Skip call with the reasons behind it.</p>
     </div>
-    <span class="mode" id="mode" role="status">Demo scoring · Jev not connected</span>
+    <span class="mode" id="mode" role="status">Ready</span>
   </header>
 
   <div class="layout">
     <section class="panel" aria-labelledby="in-h">
       <h2 id="in-h">Domains to check</h2>
       <div style="display:grid;gap:6px">
-        <label for="domains">One domain per line</label>
+        <label for="domains">One name or domain per line</label>
         <textarea id="domains" spellcheck="false"></textarea>
-        <p class="hint">Example names are loaded. Replace them with your own list.</p>
+        <p class="hint">A plain name like <b>zenpay</b> is checked as zenpay.com and zenpay.ai. Example names are loaded. Replace them with your own.</p>
       </div>
       <div class="btns">
         <button class="primary" id="run">Check domains</button>
@@ -248,13 +253,14 @@ footer p { margin: 0 0 6px; }
           <tbody id="rows"></tbody>
         </table>
       </div>
-      <p class="hint">Click a row to see why it got its call. Click a column name to sort.</p>
+      <p class="hint" id="resultsHint">Click a row to see why it got its call. Click a column name to sort.</p>
     </section>
   </div>
 
   <footer>
     <p><b>How the score works:</b> every name is rated on brandability, how easy it is to say, its extension and whether it uses real words. Your sliders set how much each counts. A name that includes a famous brand is always a Skip, because of trademark risk.</p>
-    <p>When Jev is connected, it rates brandability, the radio test, trademark risk and the likely buyer. Extension and real words are always worked out by the page itself. If Jev can't be reached, simple built-in rules fill in. Either way the score is a starting point, not a price estimate: always check availability, recent sales of similar names and trademarks before buying.</p>
+    <p><b>Availability first:</b> every name is looked up in its registry before Jev sees it. Taken names are hidden and never sent to Jev, so they cost no usage. Results are remembered while the page is open, so changing sliders or checking the same name again doesn't use Jev again.</p>
+    <p>Jev rates brandability, the radio test, trademark risk and the likely buyer. Extension and real words are worked out by the page itself. "Available" means nobody has registered the name; a registry can still charge a premium price for it, so confirm the price at your registrar. The score is a starting point, not a price estimate.</p>
   </footer>
 </div>
 
@@ -315,8 +321,8 @@ footer p { margin: 0 0 6px; }
     { key: "words", label: "Real words", help: "One or two dictionary words beat coined names." }
   ];
   var DEFAULTS = { brand: 35, say: 25, ext: 25, words: 15, buyAt: 70 };
-  var SAMPLE = ["cloudnest.com", "zenpay.ai", "homefit.co", "solarhub.com", "kwyxtr.io",
-    "best-cheap-loans-4u.net", "googledeals.com", "trendly.xyz", "vexo.com"].join("\n");
+  var SAMPLE = ["cloudnest", "zenpay", "vexo.com", "homefit.co", "kwyxtr.io",
+    "best-cheap-loans-4u.net", "googledeals.com", "trendly.xyz"].join("\n");
 
   // ---------- Facts (exact, computed by code) ----------
   function parse(raw) {
@@ -444,7 +450,7 @@ footer p { margin: 0 0 6px; }
   }
 
   // ---------- Settings (remembered in this browser when possible) ----------
-  var STORE = "domain-scout-v1";
+  var STORE = "domain-scout-v2";
   var state = load();
 
   function load() {
@@ -490,32 +496,47 @@ footer p { margin: 0 0 6px; }
     $("buyAtOut").textContent = s.buyAt;
   }
 
+  // A plain name ("zenpay") is expanded to the .com and .ai versions.
+  var EXPAND_TO = ["com", "ai"];
+  var hasServer = location.protocol !== "file:";
+  var known = {};   // domain -> server answer, kept while the page is open
+  var request = 0;
+  var showTaken = false;
+
   function run() {
     state.list = $("domains").value;
-    var seen = new Set();
-    results = state.list.split(/[\n,]+/).map(function (s) { return s.trim(); })
-      .filter(function (s) { if (!s || seen.has(s.toLowerCase())) return false; seen.add(s.toLowerCase()); return true; })
-      .map(evaluate);
+    var seen = new Set(), lines = [];
+    state.list.split(/[\n,]+/).forEach(function (line) {
+      var t = line.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+      if (!t) return;
+      var names = t.indexOf(".") === -1 ? EXPAND_TO.map(function (x) { return t + "." + x; }) : [t];
+      names.forEach(function (n) { if (!seen.has(n)) { seen.add(n); lines.push(n); } });
+    });
+    results = lines.map(evaluate);
     openRow = null;
+    results.forEach(function (r) {
+      if (r.invalid) return;
+      if (!hasServer) r.status = "unchecked";
+      else if (known[r.f.domain]) applyAnswer(r, known[r.f.domain]);
+      else r.status = "pending";
+    });
     rescore();
-    askJev();
+    if (hasServer) checkServer();
+    else setMode("Demo · availability not checked, Jev not connected");
   }
 
-  // ---------- Jev (via this site's server, which holds the API key) ----------
-  var request = 0;
-
-  function setMode(text, live) {
+  function setMode(text, live, title) {
     $("mode").textContent = text;
     $("mode").classList.toggle("live", !!live);
+    $("mode").title = title || "";
   }
 
-  function askJev() {
+  function checkServer() {
     var mine = ++request;
-    var valid = results.filter(function (r) { return !r.invalid; });
-    if (!valid.length) return;
-    if (location.protocol === "file:") { setMode("Demo scoring · Jev not connected"); return; }
-    var batch = valid.slice(0, 50);
-    setMode("Asking Jev about " + batch.length + " domain" + (batch.length === 1 ? "" : "s") + "…");
+    var todo = results.filter(function (r) { return r.status === "pending"; });
+    if (!todo.length) { summarizeMode(); return; }
+    var batch = todo.slice(0, 50);
+    setMode("Checking availability of " + batch.length + " domain" + (batch.length === 1 ? "" : "s") + "…");
     fetch("api/evaluate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -527,32 +548,49 @@ footer p { margin: 0 0 6px; }
       });
     }).then(function (body) {
       if (mine !== request) return;
-      var done = 0, failed = 0;
+      jevConnected = body.jev;
       batch.forEach(function (r) {
-        var jv = body.results && body.results[r.f.domain];
-        if (jv && !jv.error) { applyJev(r, jv); done++; } else failed++;
+        var a = body.results && body.results[r.f.domain];
+        if (!a) return;
+        if (a.availability !== "unknown" && !a.error) known[r.f.domain] = a;
+        applyAnswer(r, a);
       });
-      var extra = valid.length > batch.length ? " (first 50 only)" : "";
-      setMode(done ? "Scored by Jev" + extra + (failed ? " · " + failed + " failed, shown with demo rules" : "") :
-        "Jev didn't answer · showing demo scoring", done > 0);
       rescore();
+      if (todo.length > batch.length) checkServer(); else summarizeMode();
     }).catch(function (e) {
       if (mine !== request) return;
-      setMode("Demo scoring · Jev not connected");
-      $("mode").title = e.message;
+      batch.forEach(function (r) { r.status = "unknown"; });
+      rescore();
+      setMode("Couldn't reach the server", false, e.message);
     });
   }
 
-  function applyJev(r, jv) {
-    r.jev = jv;
-    r.j.brand = jv.brand.value;
-    r.j.say = jv.say.value;
-    r.j.industry = jv.industry;
-    if (jv.trademark >= 0.5 && !r.j.trademark) r.j.trademark = "a well-known brand";
+  var jevConnected = null;
+
+  function summarizeMode() {
+    var avail = results.filter(function (r) { return r.status === "available"; });
+    var rated = avail.filter(function (r) { return r.jev; }).length;
+    if (!results.some(function (r) { return !r.invalid; })) { setMode("Ready"); return; }
+    if (jevConnected === false) setMode(avail.length + " available · Jev not connected", false, "Add TYPESAFE_API_KEY in Vercel, then redeploy.");
+    else if (avail.length && rated < avail.length) setMode(avail.length + " available · Jev rated " + rated, rated > 0, "Some Jev requests failed; those use the built-in rules.");
+    else setMode(avail.length + " available · scored by Jev", avail.length > 0);
   }
 
+  function applyAnswer(r, a) {
+    r.status = a.availability;
+    if (a.brand && !a.error) {
+      r.jev = a;
+      r.j.brand = a.brand.value;
+      r.j.say = a.say.value;
+      r.j.industry = a.industry;
+      if (a.trademark >= 0.5 && !r.j.trademark) r.j.trademark = "a well-known brand";
+    }
+  }
+
+  function scored(r) { return r.status === "available" || r.status === "unchecked"; }
+
   function rescore() {
-    results.forEach(function (r) { if (!r.invalid) r.d = decide(r, state.settings); });
+    results.forEach(function (r) { if (!r.invalid && scored(r)) r.d = decide(r, state.settings); });
     save();
     render();
   }
@@ -564,38 +602,63 @@ footer p { margin: 0 0 6px; }
 
   function barColor(v) { return v >= 0.7 ? "var(--buy)" : v >= 0.45 ? "var(--maybe)" : "var(--skip)"; }
 
+  var STATUS = {
+    pending: ["pending", "Checking…", "Looking this name up in its registry."],
+    taken: ["taken", "Taken", "Already registered, so Jev wasn't asked about it."],
+    unknown: ["unknown", "Couldn't check", "The registry lookup failed, so Jev wasn't asked. Press Check domains to try again."]
+  };
+
   function render() {
     var valid = results.filter(function (r) { return !r.invalid; });
-    var counts = { buy: 0, maybe: 0, skip: 0 };
-    valid.forEach(function (r) { counts[r.d.verdict]++; });
-    $("summary").innerHTML = results.length ?
-      '<span class="chip buy">' + counts.buy + ' Buy</span><span class="chip maybe">' + counts.maybe +
-      ' Maybe</span><span class="chip skip">' + counts.skip + ' Skip</span><span class="chip total">' +
-      valid.length + ' checked</span>' : "";
+    var counts = { buy: 0, maybe: 0, skip: 0, taken: 0, unknown: 0, pending: 0 };
+    valid.forEach(function (r) { counts[scored(r) ? r.d.verdict : r.status]++; });
+    var chips = [];
+    if (counts.buy + counts.maybe + counts.skip) chips.push('<span class="chip buy">' + counts.buy + ' Buy</span><span class="chip maybe">' +
+      counts.maybe + ' Maybe</span><span class="chip skip">' + counts.skip + ' Skip</span>');
+    if (counts.pending) chips.push('<span class="chip total">' + counts.pending + ' checking…</span>');
+    if (counts.taken) chips.push('<button class="chip total toggle" id="takenToggle">' + counts.taken + ' taken · ' +
+      (showTaken ? "hide" : "show") + '</button>');
+    if (counts.unknown) chips.push('<span class="chip total">' + counts.unknown + " couldn't check</span>");
+    $("summary").innerHTML = chips.join("");
+    if ($("takenToggle")) $("takenToggle").addEventListener("click", function () { showTaken = !showTaken; render(); });
 
-    var sorted = valid.slice().sort(function (a, b) {
+    var group = function (r) { return scored(r) ? 0 : r.status === "pending" ? 1 : r.status === "unknown" ? 2 : 3; };
+    var sorted = valid.filter(function (r) { return showTaken || r.status !== "taken"; }).sort(function (a, b) {
       var x, y;
-      if (sortKey === "domain") { x = a.f.domain; y = b.f.domain; return sortDir * (x < y ? -1 : x > y ? 1 : 0); }
+      if (group(a) !== group(b)) return group(a) - group(b);
+      if (sortKey === "domain" || !scored(a)) { x = a.f.domain; y = b.f.domain; return (sortKey === "domain" ? sortDir : 1) * (x < y ? -1 : x > y ? 1 : 0); }
       if (sortKey === "verdict") { x = RANK[a.d.verdict]; y = RANK[b.d.verdict]; if (x !== y) return -sortDir * (x - y); }
       return sortDir * (a.d.score - b.d.score);
     });
 
     var html = sorted.map(function (r) {
-      var f = r.f, j = r.j, d = r.d;
+      var f = r.f, j = r.j, d = r.d, open = openRow === f.domain;
       var meta = f.length + "L · " + (f.length <= 8 ? f.pattern : f.tld.toUpperCase()) +
         (f.words ? " · " + f.words.join(" + ") : "");
-      var mini = FACTORS.map(function (x) {
-        return '<span>' + x.label.split(" ")[0] + ' <b>' + Math.round(j[x.key] * 100) + '</b></span>';
-      }).join("");
-      var row = '<tr class="row" data-d="' + esc(f.domain) + '" tabindex="0" aria-expanded="' + (openRow === f.domain) + '">' +
-        '<td><div class="dom">' + esc(f.domain) + '</div><div class="meta">' + esc(meta) + '</div></td>' +
-        '<td><span class="verdict ' + d.verdict + '">' + LABEL[d.verdict] + '</span></td>' +
-        '<td><div class="score"><b>' + d.score + '</b><div class="bar"><i style="width:' + d.score + '%;background:' +
-        barColor(d.score / 100) + '"></i></div></div></td>' +
-        '<td><div class="mini">' + mini + '</div></td>' +
-        '<td>' + esc(j.industry) + '</td></tr>';
-      if (openRow === f.domain) {
-        row += '<tr class="detail"><td colspan="5"><ul class="reasons">' + d.reasons.map(function (x) {
+      var head = '<tr class="row' + (r.status === "taken" ? " muted" : "") + '" data-d="' + esc(f.domain) +
+        '" tabindex="0" aria-expanded="' + open + '"><td><div class="dom">' + esc(f.domain) +
+        '</div><div class="meta">' + esc(meta) + '</div></td>';
+      var row, lines;
+      if (!scored(r)) {
+        var st = STATUS[r.status];
+        row = head + '<td><span class="verdict ' + st[0] + '">' + st[1] + '</span></td>' +
+          '<td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>';
+        lines = [["", st[2]]];
+      } else {
+        var mini = FACTORS.map(function (x) {
+          return '<span>' + x.label.split(" ")[0] + ' <b>' + Math.round(j[x.key] * 100) + '</b></span>';
+        }).join("");
+        row = head + '<td><span class="verdict ' + d.verdict + '">' + LABEL[d.verdict] + '</span></td>' +
+          '<td><div class="score"><b>' + d.score + '</b><div class="bar"><i style="width:' + d.score + '%;background:' +
+          barColor(d.score / 100) + '"></i></div></div></td>' +
+          '<td><div class="mini">' + mini + '</div></td>' +
+          '<td>' + esc(j.industry) + '</td></tr>';
+        lines = (r.status === "available" ? [["good", "Available: nobody has registered it. Confirm the price at your registrar."]] :
+          [["", "Availability not checked in this demo."]]).concat(d.reasons);
+        if (r.status === "available" && !r.jev) lines.push(["", "Jev didn't rate this one, so the built-in rules were used."]);
+      }
+      if (open) {
+        row += '<tr class="detail"><td colspan="5"><ul class="reasons">' + lines.map(function (x) {
           return '<li class="' + x[0] + '">' + esc(x[1]) + '</li>';
         }).join("") + '</ul></td></tr>';
       }
@@ -607,7 +670,8 @@ footer p { margin: 0 0 6px; }
       html += '<tr><td colspan="5" class="invalid">Not a valid domain, so skipped: ' +
         bad.map(function (r) { return esc(r.raw); }).join(", ") + '</td></tr>';
     }
-    if (!results.length) html = '<tr><td colspan="5" class="empty">Add some domains on the left and press Check domains.</td></tr>';
+    if (!results.length) html = '<tr><td colspan="5" class="empty">Add some names on the left and press Check domains.</td></tr>';
+    else if (!sorted.length && !bad.length) html = '<tr><td colspan="5" class="empty">Every name on your list is taken.</td></tr>';
     $("rows").innerHTML = html;
 
     document.querySelectorAll("th.sortable").forEach(function (th) {
@@ -640,7 +704,12 @@ footer p { margin: 0 0 6px; }
   buildSliders();
   $("domains").value = state.list;
   syncSliders();
-  run();
+  if (hasServer) {
+    render();
+    $("rows").innerHTML = '<tr><td colspan="5" class="empty">Press <b>Check domains</b> to look up your list.</td></tr>';
+  } else {
+    run();
+  }
 })();
 </script>
 </body>

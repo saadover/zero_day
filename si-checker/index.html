@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>.si Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ink: #172033;
+  --ink-soft: #566176;
+  --paper: #f4f6f9;
+  --panel: #ffffff;
+  --line: #dbe1ea;
+  --accent: #1f4e9c;
+  --accent-soft: #e2eaf7;
+  --free: #1d7a46;
+  --free-bg: #dff2e7;
+  --taken: #b3362d;
+  --taken-bg: #f8e1de;
+  --unknown: #8a5a00;
+  --unknown-bg: #fbeed3;
+  --track: #e5e9f0;
+  --display: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #e5eaf3; --ink-soft: #9ba7ba; --paper: #0f141d; --panel: #171e2a; --line: #2a3446;
+    --accent: #7aa7f0; --accent-soft: #1c2b45; --free: #6fd694; --free-bg: #183424;
+    --taken: #f08a82; --taken-bg: #3d1c1a; --unknown: #f0b54a; --unknown-bg: #3a2c12; --track: #263042;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e5eaf3; --ink-soft: #9ba7ba; --paper: #0f141d; --panel: #171e2a; --line: #2a3446;
+  --accent: #7aa7f0; --accent-soft: #1c2b45; --free: #6fd694; --free-bg: #183424;
+  --taken: #f08a82; --taken-bg: #3d1c1a; --unknown: #f0b54a; --unknown-bg: #3a2c12; --track: #263042;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; padding: 0 16px; padding-block: 28px 48px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 4.5vw, 42px); letter-spacing: -0.02em; margin: 0; }
+h1 span { color: var(--accent); }
+.tagline { color: var(--ink-soft); margin: 4px 0 0; max-width: 62ch; }
+.layout { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; gap: 22px; align-items: start; }
+@media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+label { font-weight: 600; font-size: 14px; }
+textarea { width: 100%; min-height: 260px; resize: vertical; font-family: var(--mono); font-size: 14px; line-height: 1.6; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.hint { font-size: 13px; color: var(--ink-soft); margin: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: inherit; font-weight: 700; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--accent); }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[disabled] { opacity: 0.5; cursor: not-allowed; }
+.primary { background: var(--accent); color: var(--panel); }
+.ghost { background: transparent; color: var(--accent); }
+.ghost:hover:not([disabled]) { background: var(--accent-soft); }
+.results { display: grid; gap: 14px; min-width: 0; }
+.progress { display: grid; gap: 6px; }
+.progress .bar { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+.progress p { margin: 0; font-size: 14px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 14px; font-weight: 700; border-radius: 999px; padding: 5px 14px; border: 2px solid transparent; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { border-color: currentColor; }
+.chip.all { color: var(--ink-soft); background: var(--track); }
+.chip.available { color: var(--free); background: var(--free-bg); }
+.chip.taken { color: var(--taken); background: var(--taken-bg); }
+.chip.unknown { color: var(--unknown); background: var(--unknown-bg); }
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; min-width: 480px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.dom { font-family: var(--mono); font-weight: 500; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.status.available { color: var(--free); }
+.status.taken { color: var(--taken); }
+.status.unknown, .status.invalid { color: var(--unknown); }
+.status.waiting { color: var(--ink-soft); }
+.note { font-size: 12px; color: var(--ink-soft); }
+.empty { padding: 28px; text-align: center; color: var(--ink-soft); }
+.toast { font-size: 13px; color: var(--free); min-height: 1.5em; margin: 0; }
+footer { font-size: 13px; color: var(--ink-soft); max-width: 75ch; }
+footer p { margin: 0 0 6px; }
+@media (prefers-reduced-motion: no-preference) { .progress .bar i { transition: width .3s ease; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span>.si</span> Checker</h1>
+    <p class="tagline">Paste your list of words. Each one is looked up as a .si domain with the official Slovenian registry, Arnes, and marked available or taken.</p>
+  </header>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="in-h">
+      <label id="in-h" for="words">Your words, one per line</label>
+      <textarea id="words" spellcheck="false" placeholder="zenpay&#10;cloudnest&#10;sončnica"></textarea>
+      <p class="hint">Spaces are removed and ".si" is added for you. Slovenian letters like č, š and ž work too. Duplicates are checked once.</p>
+      <div class="btns">
+        <button class="primary" id="check">Check availability</button>
+        <button class="ghost" id="stop" hidden>Stop</button>
+      </div>
+    </section>
+
+    <section class="results" aria-labelledby="out-h">
+      <h2 id="out-h" hidden>Results</h2>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><i id="bar"></i></div>
+        <p id="progressText"></p>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div class="btns">
+        <button class="ghost" id="copy" disabled>Copy available names</button>
+        <button class="ghost" id="csv" disabled>Download CSV</button>
+        <button class="ghost" id="retry" hidden>Retry "Couldn't check"</button>
+      </div>
+      <p class="toast" id="toast" role="status"></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Domain</th><th>Status</th><th>Details</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="3" class="empty">Paste your words on the left and press Check availability.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p><b>Where the answers come from:</b> every name is looked up live with Arnes, the registry that runs all .si domains. "Available" means the registry has no record of the name; "Taken" means someone has registered it. You can confirm any result at register.si.</p>
+    <p><b>Couldn't check</b> means the registry didn't give a clear answer, often because too many names were checked in a short time. Wait a while and press Retry. A name is never marked available without a clear answer from the registry.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var BATCH = 25;
+  var STORE = "si-checker-v1";
+  var LABEL = { available: "Available", taken: "Taken", unknown: "Couldn't check", invalid: "Not valid", waiting: "Waiting…" };
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+
+  var rows = [];          // { word, display, status, domain, source, note }
+  var filter = "all";
+  var running = false, stopRequested = false;
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (saved) { $("words").value = saved.text || ""; rows = saved.rows || []; }
+  } catch (e) {}
+  function save() { try { localStorage.setItem(STORE, JSON.stringify({ text: $("words").value, rows: rows })); } catch (e) {} }
+
+  function cleanWord(w) { return w.trim().toLowerCase().replace(/\.si$/, "").replace(/\s+/g, ""); }
+
+  function parseWords() {
+    var seen = new Set(), out = [];
+    $("words").value.split(/[\n,;]+/).forEach(function (w) {
+      var c = cleanWord(w);
+      if (c && !seen.has(c)) { seen.add(c); out.push(c); }
+    });
+    return out;
+  }
+
+  function counts() {
+    var c = { all: rows.length, available: 0, taken: 0, unknown: 0 };
+    rows.forEach(function (r) {
+      if (r.status === "available") c.available++;
+      else if (r.status === "taken") c.taken++;
+      else if (r.status === "unknown" || r.status === "invalid") c.unknown++;
+    });
+    return c;
+  }
+
+  function render() {
+    var c = counts();
+    $("filters").innerHTML = rows.length ? [["all", "All"], ["available", "Available"], ["taken", "Taken"], ["unknown", "Couldn't check"]]
+      .filter(function (f) { return f[0] === "all" || c[f[0]]; })
+      .map(function (f) {
+        return '<button class="chip ' + f[0] + '" data-filter="' + f[0] + '" aria-pressed="' + (filter === f[0]) + '">' + c[f[0]] + ' ' + f[1] + '</button>';
+      }).join("") : "";
+    var shown = rows.filter(function (r) {
+      return filter === "all" || r.status === filter || (filter === "unknown" && r.status === "invalid");
+    });
+    $("rows").innerHTML = shown.length ? shown.map(function (r) {
+      var details = r.status === "unknown" || r.status === "invalid" ? (r.note || "") : (r.source ? "Checked with " + r.source : "");
+      return '<tr><td class="dom">' + esc(r.display) + '</td><td><span class="status ' + r.status + '">' + LABEL[r.status] + '</span></td>' +
+        '<td class="note">' + esc(details) + '</td></tr>';
+    }).join("") : '<tr><td colspan="3" class="empty">' + (rows.length ? "Nothing in this filter." : "Paste your words on the left and press Check availability.") + '</td></tr>';
+    $("copy").disabled = !c.available;
+    $("csv").disabled = !rows.some(function (r) { return r.status !== "waiting"; });
+    $("retry").hidden = running || !rows.some(function (r) { return r.status === "unknown"; });
+  }
+
+  function setProgress(done, total) {
+    $("progress").hidden = false;
+    $("bar").style.width = (total ? Math.round(100 * done / total) : 0) + "%";
+    $("progressText").textContent = running ? "Checked " + done + " of " + total + "…" : "Checked " + done + " of " + total + ".";
+  }
+
+  function post(words) {
+    return fetch("api/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ words: words })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.error || "The server answered " + res.status + ".");
+        return body.results;
+      });
+    });
+  }
+
+  // Checks every row whose status is in `which`, BATCH names per request.
+  function runChecks(which) {
+    var todo = rows.filter(function (r) { return which.indexOf(r.status) !== -1; });
+    if (!todo.length) return;
+    if (location.protocol === "file:") { flash("Open this page from your Vercel site. Lookups need the server.", true); return; }
+    running = true; stopRequested = false;
+    $("check").disabled = true; $("stop").hidden = false;
+    todo.forEach(function (r) { r.status = "waiting"; r.note = ""; });
+    var done = 0;
+    setProgress(0, todo.length); render();
+
+    (function nextBatch(i) {
+      if (i >= todo.length || stopRequested) return finish();
+      var batch = todo.slice(i, i + BATCH);
+      post(batch.map(function (r) { return r.word; })).then(function (results) {
+        results.forEach(function (res, k) {
+          var r = batch[k];
+          r.status = res.status; r.source = res.source || ""; r.note = res.note || "";
+        });
+      }).catch(function (e) {
+        batch.forEach(function (r) { r.status = "unknown"; r.note = e.message; });
+      }).then(function () {
+        done += batch.length;
+        setProgress(done, todo.length); render(); save();
+        nextBatch(i + BATCH);
+      });
+    })(0);
+
+    function finish() {
+      todo.forEach(function (r) { if (r.status === "waiting") { r.status = "unknown"; r.note = "Stopped before this name was checked."; } });
+      running = false;
+      $("check").disabled = false; $("stop").hidden = true;
+      setProgress(done, todo.length); render(); save();
+    }
+  }
+
+  function flash(text, bad) {
+    $("toast").textContent = text;
+    $("toast").style.color = bad ? "var(--taken)" : "var(--free)";
+    clearTimeout(flash.t); flash.t = setTimeout(function () { $("toast").textContent = ""; }, 4000);
+  }
+
+  $("check").addEventListener("click", function () {
+    var words = parseWords();
+    if (!words.length) { flash("Add at least one word first.", true); return; }
+    rows = words.map(function (w) { return { word: w, display: w + ".si", status: "new" }; });
+    filter = "all";
+    runChecks(["new"]);
+  });
+  $("stop").addEventListener("click", function () { stopRequested = true; $("stop").hidden = true; });
+  $("retry").addEventListener("click", function () { runChecks(["unknown"]); });
+  $("filters").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-filter]");
+    if (b) { filter = b.dataset.filter; render(); }
+  });
+  $("copy").addEventListener("click", function () {
+    var text = rows.filter(function (r) { return r.status === "available"; }).map(function (r) { return r.display; }).join("\n");
+    navigator.clipboard.writeText(text).then(function () { flash("Copied " + text.split("\n").length + " available names."); },
+      function () { flash("Copying isn't allowed here. Use Download CSV instead.", true); });
+  });
+  $("csv").addEventListener("click", function () {
+    var lines = [["domain", "status", "details"]].concat(rows.map(function (r) {
+      return [r.display, LABEL[r.status], r.status === "unknown" || r.status === "invalid" ? r.note : r.source];
+    })).map(function (cols) { return cols.map(function (v) { return '"' + String(v || "").replace(/"/g, '""') + '"'; }).join(","); });
+    var url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    var a = document.createElement("a");
+    a.href = url; a.download = "si-domains.csv"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+  $("words").addEventListener("input", save);
+
+  rows.forEach(function (r) { if (r.status === "waiting" || r.status === "new") { r.status = "unknown"; r.note = "Not checked yet. Press Retry."; } });
+  render();
+})();
+</script>
+</body>
+</html>

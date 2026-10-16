@@ -31,7 +31,7 @@ function upsertRows<T extends Row>(table: TableName, list: T[], rows: T[]): T[] 
   return [...map.values()];
 }
 
-function removeRows<T extends Row>(table: TableName, list: T[], match: Row): T[] {
+function removeRows<T extends Row>(list: T[], match: Row): T[] {
   return list.filter((r) => !Object.entries(match).every(([k, v]) => r[k] === v));
 }
 
@@ -108,7 +108,7 @@ export function DataProvider({ session, children }: { session: Session; children
       if (payload.eventType === 'DELETE') {
         const old = payload.old as Row;
         const match = Object.fromEntries(KEYS[table].map((k) => [k, old[k]]));
-        apply(table, (l) => removeRows(table, l, match));
+        apply(table, (l) => removeRows(l, match));
       } else {
         apply(table, (l) => upsertRows(table, l, [payload.new as Row]));
       }
@@ -164,7 +164,7 @@ export function DataProvider({ session, children }: { session: Session; children
   }, [apply, reload, toast]);
 
   const remove = useCallback(async <K extends TableName>(table: K, match: Partial<Tables[K]>) => {
-    apply(table, (l) => removeRows(table, l, match as Row));
+    apply(table, (l) => removeRows(l, match as Row));
     let q = supabase.from(table).delete();
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v as string);
     const { error } = await q;

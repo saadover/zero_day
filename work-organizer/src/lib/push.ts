@@ -54,9 +54,9 @@ export async function currentPushState(): Promise<'on' | 'off' | 'denied' | 'uns
 }
 
 /** Show a desktop notification right now (used while the app is open). */
-export async function showLocal(title: string, body: string, url = '/') {
+export async function showLocal(title: string, body: string, url = '/', tag = url) {
   if (!pushSupported() || Notification.permission !== 'granted') return;
   const reg = await navigator.serviceWorker.getRegistration();
-  if (reg) reg.showNotification(title, { body, icon: '/favicon.svg', data: { url }, tag: url });
+  if (reg) reg.showNotification(title, { body, icon: '/favicon.svg', data: { url }, tag });
   else new Notification(title, { body, icon: '/favicon.svg' });
 }

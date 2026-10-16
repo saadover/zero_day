@@ -44,7 +44,7 @@ export default async function handlerFn(req, res) {
     const url = appUrl(req);
     const [{ data: profiles }, { data: tasks }, { data: assignees }, { data: subs }, { data: pending }] = await Promise.all([
       db.from('profiles').select('*'),
-      db.from('tasks').select('id, number, title, status, priority, do_date, do_time, deadline, deadline_time, follow_up_date, follow_up_time, follow_up_with, remind_at, given_by, created_by').neq('status', 'Done'),
+      db.from('tasks').select('id, number, title, status, priority, do_date, do_time, deadline, deadline_time, follow_up_date, follow_up_time, follow_up_with, remind_at, given_by, created_by, start_alerts, deadline_alerts').neq('status', 'Done'),
       db.from('task_assignees').select('task_id, user_id'),
       db.from('push_subscriptions').select('*'),
       db.from('notifications').select('*').is('sent_at', null),
@@ -90,20 +90,44 @@ export default async function handlerFn(req, res) {
       const at = (t) => (hm(t.deadline_time) ? ` at ${hm(t.deadline_time)}` : '');
       const overdueNow = (t) => t.deadline && (t.deadline < now.date || (t.deadline === now.date && hm(t.deadline_time) && hm(t.deadline_time) <= now.time));
 
+      // Alarms the person set on a task: at the start time / before it, and before a timed deadline.
+      // They ignore quiet hours (you asked for them) and fire within a few minutes of the moment.
+      const nowMin = mins(now.time);
+      const minutesUntil = (date, time) => diffDays(now.date, date) * 1440 + mins(time) - nowMin;
+      const inWords = (left) => (left <= 0 ? 'now' : left < 60 ? `in ${left} min` : left < 1440 ? `in ${Math.round(left / 60)} h` : 'tomorrow');
+      // For one moment (start or deadline): of the alarms that are due, send only the latest one,
+      // with the real time left, and mark the others as handled.
+      const fire = (kind, t, date, time, offsets, label) => {
+        const left = minutesUntil(date, time);
+        const due = (offsets ?? []).filter((m) => left - m <= 0 && left - m > -30)
+          .map((m) => ({ m, key: `${kind}:${t.id}:${date}:${time}:${m}` })).filter((x) => !has(x.key));
+        if (!due.length) return false;
+        for (const x of due) { logged.add(`${p.id}|${x.key}`); newLog.push({ user_id: p.id, key: x.key }); }
+        const pick = due.sort((x, y) => x.m - y.m)[0];
+        alerts.push({ key: pick.key, alarm: true, always: true, logged: true, url: taskUrl(t), section: 'Alarms', ...label(left) });
+        return true;
+      };
+      for (const t of mine) {
+        if (p.remind_start !== false && t.do_date && hm(t.do_time)) {
+          fire('start', t, t.do_date, hm(t.do_time), t.start_alerts ?? [0], (left) => ({
+            title: left <= 0 ? `Time to start: ${t.title}` : `Starts ${inWords(left)}: ${t.title}`, body: `Planned for ${hm(t.do_time)}`,
+          }));
+        }
+        if (p.remind_due_soon !== false && t.deadline && hm(t.deadline_time)) {
+          const sent = fire('due', t, t.deadline, hm(t.deadline_time), t.deadline_alerts ?? [60], (left) => ({
+            title: left <= 0 ? `Due now: ${t.title}` : `Due ${inWords(left)}: ${t.title}`, body: `Deadline ${hm(t.deadline_time)}`,
+          }));
+          if (sent) {
+            // Already warned with an alarm — skip the generic "due today" for it.
+            const todayKey = `today:${t.id}:${t.deadline}`;
+            logged.add(`${p.id}|${todayKey}`);
+            newLog.push({ user_id: p.id, key: todayKey });
+          }
+        }
+      }
+
       if (!quiet) {
         for (const t of mine) {
-          // About an hour before a timed deadline — not tied to the morning summary time.
-          if (p.remind_due_soon !== false && t.deadline === now.date && hm(t.deadline_time)) {
-            const left = mins(hm(t.deadline_time)) - mins(now.time);
-            const key = `soon:${t.id}:${t.deadline}:${hm(t.deadline_time)}`;
-            if (left > 0 && left <= 75 && !has(key)) {
-              alerts.push({ key, title: `Due in ${left} min: ${t.title}`, body: `Deadline today${at(t)}`, url: taskUrl(t), section: 'Due soon' });
-              // Already warned — no separate "due today" for the same task.
-              const todayKey = `today:${t.id}:${t.deadline}`;
-              logged.add(`${p.id}|${todayKey}`);
-              newLog.push({ user_id: p.id, key: todayKey });
-            }
-          }
           if (p.remind_followups && t.follow_up_date === now.date && hm(t.follow_up_time) && hm(t.follow_up_time) <= now.time) {
             const key = `follow:${t.id}:${t.follow_up_date}`;
             if (!has(key)) alerts.push({ key, title: `Follow up${t.follow_up_with ? ` with ${t.follow_up_with}` : ''} now`, body: t.title, url: taskUrl(t), section: 'Follow-ups' });
@@ -158,6 +182,7 @@ export default async function handlerFn(req, res) {
       }
 
       const sendAlerts = alerts.filter((a) => !a.inDigest);
+      const emailAlerts = sendAlerts.filter((a) => !a.alarm || p.alarm_email);
       for (const a of alerts) newLog.push({ user_id: p.id, key: a.key });
       const deliverQueued = queued.filter((n) => p.remind_assigned || n.kind !== 'assigned');
       if (!digest && !sendAlerts.length && !deliverQueued.length) continue;
@@ -175,10 +200,10 @@ export default async function handlerFn(req, res) {
         if (digest) {
           const bits = [digest.today && `${digest.today} today`, digest.overdue && `${digest.overdue} overdue`, digest.follow && `${digest.follow} to chase`].filter(Boolean);
           subject = `Your day: ${bits.join(', ') || 'summary'}`;
-          const extra = [...sendAlerts, ...(quiet ? [] : deliverQueued.map((n) => ({ title: n.title, body: n.body, url: n.task_id ? `${url}/tasks/all?task=${n.task_id}` : url, section: 'Updates' })))];
+          const extra = [...emailAlerts, ...(quiet ? [] : deliverQueued.map((n) => ({ title: n.title, body: n.body, url: n.task_id ? `${url}/tasks/all?task=${n.task_id}` : url, section: 'Updates' })))];
           msg = { heading: 'Good morning', intro: `Here's what needs you on ${fmtDay(now.date)}.`, sections: [...digest.sections, { title: 'Updates', items: extra.map((a) => ({ text: a.title, meta: a.body, url: a.url })) }], appUrl: url };
         } else {
-          const items = [...sendAlerts, ...(quiet ? [] : deliverQueued.map((n) => ({ title: n.title, body: n.body, url: n.task_id ? `${url}/tasks/all?task=${n.task_id}` : url, section: 'Updates' })))];
+          const items = [...emailAlerts, ...(quiet ? [] : deliverQueued.map((n) => ({ title: n.title, body: n.body, url: n.task_id ? `${url}/tasks/all?task=${n.task_id}` : url, section: 'Updates' })))];
           if (items.length) {
             subject = items.length === 1 ? items[0].title : `${items.length} updates in Work Organizer`;
             const sections = [...new Set(items.map((i) => i.section))].map((s) => ({ title: s, items: items.filter((i) => i.section === s).map((i) => ({ text: i.title, meta: i.body, url: i.url })) }));

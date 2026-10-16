@@ -187,7 +187,7 @@ create table if not exists public.attachments (
 );
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('attachments', 'attachments', false, 10485760, array['application/pdf'])
+values ('attachments', 'attachments', false, 10485760, array['application/pdf', 'image/webp', 'image/jpeg', 'image/png'])
 on conflict (id) do update
   set file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
@@ -356,6 +356,14 @@ alter table public.checklist_items add column if not exists only_day date;
 
 alter table public.profiles add column if not exists remind_due_today boolean not null default true;
 alter table public.profiles add column if not exists remind_due_soon boolean not null default true;
+
+-- ───────────────────────────── Upgrade 3 ─────────────────────────────
+-- Alarms: minutes before the start (do date + time) and before the deadline.
+-- 0 = at the time itself. Example: {0,15} = at 9:00 and at 8:45.
+alter table public.tasks add column if not exists start_alerts integer[] not null default '{0}';
+alter table public.tasks add column if not exists deadline_alerts integer[] not null default '{60}';
+alter table public.profiles add column if not exists remind_start boolean not null default true;
+alter table public.profiles add column if not exists alarm_email boolean not null default false;
 
 -- ───────────────────────────── Starter content ─────────────────────────────
 

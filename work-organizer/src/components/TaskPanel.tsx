@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type MutableRefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { dueLabel, fmtDay, hhmm, timeAgo } from '../lib/dates';
+import { ALARM_CHOICES, alarmLabel } from '../lib/alarms';
 import { isOverdue } from '../lib/tasks';
 import type { Category, GivenBy, Priority, Status, Task, TaskRow } from '../lib/types';
 import { CATEGORIES, GIVEN_BY, PRIORITIES, STATUSES } from '../lib/types';
 import { useActions } from '../store/actions';
 import { useData } from '../store/data';
 import { useOpenTask } from '../store/ui';
-import { Avatar, Avatars, firstName, formatBytes, TagChip, tagDot } from './Atoms';
+import { Attachments } from './Attachments';
+import { Avatar, Avatars, firstName, TagChip, tagDot } from './Atoms';
 import {
-  IconBlock, IconChevronDown, IconCopy, IconDownload, IconLink, IconMore, IconPaperclip, IconPlus, IconTrash, IconX, PriorityIcon, StatusIcon,
+  IconBlock, IconChevronDown, IconCopy, IconLink, IconMore, IconPlus, IconTrash, IconX, PriorityIcon, StatusIcon,
 } from './Icons';
 import { ActionMenu, SelectMenu, useAnchor } from './Popover';
 import { useToast } from './Toast';
@@ -17,7 +19,7 @@ import { useToast } from './Toast';
 // ───────────────────────────── Draft model ─────────────────────────────
 
 const FIELDS = ['title', 'status', 'priority', 'given_by', 'category', 'do_date', 'do_time', 'deadline', 'deadline_time',
-  'follow_up_date', 'follow_up_time', 'follow_up_with', 'notes', 'remind_at'] as const;
+  'follow_up_date', 'follow_up_time', 'follow_up_with', 'notes', 'remind_at', 'start_alerts', 'deadline_alerts'] as const;
 type Field = (typeof FIELDS)[number];
 type Fields = Pick<TaskRow, Field>;
 
@@ -39,6 +41,8 @@ function fromTask(t: Task): Draft {
   fields.do_time = normTime(fields.do_time);
   fields.deadline_time = normTime(fields.deadline_time);
   fields.follow_up_time = normTime(fields.follow_up_time);
+  fields.start_alerts = [...(fields.start_alerts ?? [0])].sort((a, b) => a - b);
+  fields.deadline_alerts = [...(fields.deadline_alerts ?? [60])].sort((a, b) => a - b);
   return {
     fields,
     assignees: [...t.assignees].sort(),
@@ -121,7 +125,6 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
   const [newSub, setNewSub] = useState('');
   const [bulk, setBulk] = useState<string | null>(null);
   const [newTag, setNewTag] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
@@ -199,7 +202,6 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
 
   // ── Derived display data ──
   const viewers = online.filter((o) => o.viewing === task.id && o.userId !== meId).map((o) => o.userId);
-  const attachments = db.attachments.filter((a) => a.task_id === task.id && !d.removedFiles.includes(a.id));
   const linkedMeetings = useMemo(() => {
     const ids = new Set([...db.meeting_tasks.filter((m) => m.task_id === task.id).map((m) => m.meeting_id),
       ...db.meeting_actions.filter((a) => a.task_id === task.id).map((a) => a.meeting_id)]);
@@ -231,16 +233,6 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
   const setSub = (key: string, patch: Partial<DraftSub>) =>
     edit((x) => ({ ...x, subtasks: x.subtasks.map((s) => (s.key === key ? { ...s, ...patch } : s)) }));
 
-  const onFiles = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = [...(e.target.files ?? [])];
-    e.target.value = '';
-    const ok = files.filter((f) => {
-      if (!(f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))) { toast.error(`${f.name}: only PDFs can be attached.`); return false; }
-      if (f.size > 10 * 1024 * 1024) { toast.error(`${f.name}: PDFs must be 10 MB or smaller.`); return false; }
-      return true;
-    });
-    if (ok.length) edit((x) => ({ ...x, newFiles: [...x.newFiles, ...ok] }));
-  };
 
   const copyLink = () => { navigator.clipboard?.writeText(`${location.origin}/tasks/all?task=${task.id}`); toast.show('Link copied'); };
   const tagLabel = (id: string) => (id.startsWith('new:') ? { id, name: id.slice(4), color: 'gray' as const } : db.tags.find((t) => t.id === id));
@@ -258,6 +250,26 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
       )}
     </span>
   );
+
+  const alarmChips = (key: 'start_alerts' | 'deadline_alerts', what: string) => {
+    const on = d.fields[key] ?? [];
+    return (
+      <>
+        <span className="k" style={{ fontSize: 12 }}>{what} alarms</span>
+        <span className="v" style={{ gap: 4 }}>
+          {ALARM_CHOICES.map((m) => {
+            const active = on.includes(m);
+            return (
+              <button key={m} className={`pill ${active ? 'set' : ''}`} style={{ height: 24, fontSize: 11.5, padding: '0 8px' }} aria-pressed={active}
+                onClick={() => setField(key, (active ? on.filter((x) => x !== m) : [...on, m]).sort((a, b) => a - b))}>
+                {alarmLabel(m)}
+              </button>
+            );
+          })}
+        </span>
+      </>
+    );
+  };
 
   return (
     <>
@@ -324,12 +336,15 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
 
         <span className="k">Do date</span>
         {dateTime('do_date', 'do_time', 'Do date')}
+        {d.fields.do_date && d.fields.do_time && alarmChips('start_alerts', 'Start')}
+        {d.fields.do_date && !d.fields.do_time && <><span /><span className="v muted" style={{ fontSize: 12, minHeight: 22 }}>Add a time to get a “time to start” alarm.</span></>}
 
         <span className="k">Deadline</span>
         <span className="v" style={{ gap: 6 }}>
           {dateTime('deadline', 'deadline_time', 'Deadline')}
           {d.fields.deadline && d.fields.status !== 'Done' && <span className={`mono ${due.tone}`} style={{ fontSize: 12 }}>{due.text}</span>}
         </span>
+        {d.fields.deadline && d.fields.deadline_time && alarmChips('deadline_alerts', 'Deadline')}
 
         <span className="k">Follow-up date</span>
         {dateTime('follow_up_date', 'follow_up_time', 'Follow-up date')}
@@ -406,32 +421,13 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
       </div>
 
       {/* Attachments */}
-      <div className="section">
-        <div className="section-h">
-          PDFs
-          <button className="btn ghost sm r" onClick={() => fileRef.current?.click()}><IconPaperclip size={13} /> Attach PDF</button>
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple hidden onChange={onFiles} />
-        </div>
-        {attachments.length === 0 && d.newFiles.length === 0 && <span className="muted" style={{ fontSize: 12.5 }}>No files. PDFs up to 10 MB.</span>}
-        {attachments.map((a) => (
-          <div className="file" key={a.id}>
-            <span className="fi">PDF</span>
-            <button className="vbtn grow" style={{ margin: 0, flexDirection: 'column', alignItems: 'flex-start', gap: 0 }} onClick={() => act.openAttachment(a.path).catch((e) => toast.error(e.message))}>
-              <span className="ellipsis" style={{ maxWidth: '100%' }}>{a.name}</span>
-              <span className="muted" style={{ fontSize: 11.5 }}>{formatBytes(a.size)} · {firstName(personById.get(a.uploaded_by ?? ''))} · {timeAgo(a.created_at)}</span>
-            </button>
-            <button className="btn ghost icon sm" aria-label="Download" onClick={() => act.openAttachment(a.path, true).catch((e) => toast.error(e.message))}><IconDownload size={14} /></button>
-            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, a.id] }))}><IconTrash size={14} /></button>
-          </div>
-        ))}
-        {d.newFiles.map((f, i) => (
-          <div className="file" key={`${f.name}-${i}`} style={{ borderStyle: 'dashed' }}>
-            <span className="fi">PDF</span>
-            <span className="grow ellipsis">{f.name} <span className="muted" style={{ fontSize: 11.5 }}>· {formatBytes(f.size)} · uploads when you save</span></span>
-            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}><IconX size={14} /></button>
-          </div>
-        ))}
-      </div>
+      <Attachments
+        saved={db.attachments.filter((a) => a.task_id === task.id)}
+        newFiles={d.newFiles} removed={d.removedFiles}
+        onAdd={(files) => edit((x) => ({ ...x, newFiles: [...x.newFiles, ...files] }))}
+        onRemoveSaved={(id) => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, id] }))}
+        onRemoveNew={(i) => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}
+      />
 
       {linkedMeetings.length > 0 && (
         <div className="section">

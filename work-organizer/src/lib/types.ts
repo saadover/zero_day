@@ -25,6 +25,8 @@ export interface Profile {
   remind_due_tomorrow: boolean;
   remind_due_today: boolean;
   remind_due_soon: boolean;
+  remind_start: boolean;
+  alarm_email: boolean;
   remind_overdue: boolean;
   remind_followups: boolean;
   remind_assigned: boolean;
@@ -57,6 +59,8 @@ export interface TaskRow {
   follow_up_date: string | null;
   follow_up_time: string | null;
   follow_up_with: string | null;
+  start_alerts: number[];
+  deadline_alerts: number[];
   notes: string;
   remind_at: string | null;
   position: number;

@@ -56,15 +56,15 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
 }
 
 type ProfileDraft = Pick<Profile, 'full_name' | 'color' | 'theme' | 'notify_email' | 'email_enabled' | 'push_enabled' | 'digest_enabled'
-  | 'digest_time' | 'remind_due_tomorrow' | 'remind_due_today' | 'remind_due_soon' | 'remind_overdue' | 'remind_followups' | 'remind_assigned'
+  | 'digest_time' | 'remind_due_tomorrow' | 'remind_due_today' | 'remind_due_soon' | 'remind_start' | 'alarm_email' | 'remind_overdue' | 'remind_followups' | 'remind_assigned'
   | 'quiet_start' | 'quiet_end' | 'quiet_weekends'>;
 const DRAFT_KEYS: (keyof ProfileDraft)[] = ['full_name', 'color', 'theme', 'notify_email', 'email_enabled', 'push_enabled', 'digest_enabled', 'digest_time',
-  'remind_due_tomorrow', 'remind_due_today', 'remind_due_soon', 'remind_overdue', 'remind_followups', 'remind_assigned', 'quiet_start', 'quiet_end', 'quiet_weekends'];
+  'remind_due_tomorrow', 'remind_due_today', 'remind_due_soon', 'remind_start', 'alarm_email', 'remind_overdue', 'remind_followups', 'remind_assigned', 'quiet_start', 'quiet_end', 'quiet_weekends'];
 const hm = (t: string | null) => (t ? t.slice(0, 5) : null);
 const pick = (p: Profile): ProfileDraft => {
   const o = Object.fromEntries(DRAFT_KEYS.map((k) => [k, p[k]])) as ProfileDraft;
   o.digest_time = hm(o.digest_time) ?? '08:00'; o.quiet_start = hm(o.quiet_start); o.quiet_end = hm(o.quiet_end);
-  o.remind_due_today = o.remind_due_today ?? true; o.remind_due_soon = o.remind_due_soon ?? true;
+  o.remind_due_today = o.remind_due_today ?? true; o.remind_due_soon = o.remind_due_soon ?? true; o.remind_start = o.remind_start ?? true; o.alarm_email = o.alarm_email ?? false;
   return o;
 };
 
@@ -173,7 +173,9 @@ export function SettingsPage() {
               <input type="time" className="input" style={{ width: 110 }} value={d.digest_time} aria-label="Summary time" onChange={(e) => e.target.value && set({ digest_time: e.target.value })} />
             </div>
             <Toggle label="Due today" hint="When a task is due today and wasn't in the morning summary (e.g. added later)." checked={d.remind_due_today} onChange={(v) => set({ remind_due_today: v })} />
-            <Toggle label="Due soon" hint="About an hour before a deadline that has a time." checked={d.remind_due_soon} onChange={(v) => set({ remind_due_soon: v })} />
+            <Toggle label="Start alarms" hint="When a task's do date has a time: “Time to start” at that time, plus any early alarms you tick on the task (15 min, 30 min, 1 h, 1 day before)." checked={d.remind_start} onChange={(v) => set({ remind_start: v })} />
+            <Toggle label="Deadline alarms" hint="Before a deadline that has a time — 1 h before unless you choose other times on the task." checked={d.remind_due_soon} onChange={(v) => set({ remind_due_soon: v })} />
+            <Toggle label="Send alarms by email too" hint="Alarms always pop up on your desktop; tick this to also get each one by email." checked={d.alarm_email} onChange={(v) => set({ alarm_email: v })} />
             <Toggle label="High-priority deadline tomorrow" checked={d.remind_due_tomorrow} onChange={(v) => set({ remind_due_tomorrow: v })} />
             <Toggle label="Task became overdue" hint="Once per task." checked={d.remind_overdue} onChange={(v) => set({ remind_overdue: v })} />
             <Toggle label="Follow-up day" hint="“Today, chase Sarah about the contract.”" checked={d.remind_followups} onChange={(v) => set({ remind_followups: v })} />

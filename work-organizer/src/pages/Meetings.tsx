@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { firstName, formatBytes } from '../components/Atoms';
-import { IconArrowRight, IconChevronLeft, IconDownload, IconLink, IconPaperclip, IconPlus, IconTrash, IconX, StatusIcon } from '../components/Icons';
+import { Attachments } from '../components/Attachments';
+import { firstName } from '../components/Atoms';
+import { IconArrowRight, IconChevronLeft, IconLink, IconPlus, IconTrash, IconX, StatusIcon } from '../components/Icons';
 import { SelectMenu, useAnchor } from '../components/Popover';
 import { TaskRow } from '../components/TaskRow';
 import { useToast } from '../components/Toast';
@@ -74,7 +75,6 @@ export function MeetingPage() {
   const nav = useNavigate();
   const { open } = useOpenTask();
   const linkM = useAnchor();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [newAction, setNewAction] = useState('');
   const [busy, setBusy] = useState(false);
   const m = isNew ? undefined : db.meetings.find((x) => x.id === id);
@@ -107,7 +107,6 @@ export function MeetingPage() {
 
   if (!isNew && !m) return <div className="page"><div className="empty">Meeting not found. <Link to="/meetings">Back to meetings</Link></div></div>;
 
-  const files = m ? db.attachments.filter((a) => a.meeting_id === m.id && !d.removedFiles.includes(a.id)) : [];
 
   /** Write the draft to the database. Returns the meeting id. */
   const save = async (): Promise<string | null> => {
@@ -165,11 +164,6 @@ export function MeetingPage() {
     toast.show(`Task #${row.number} created`, { label: 'Open', run: () => open(row.id) });
   };
 
-  const onFiles = (e: ChangeEvent<HTMLInputElement>) => {
-    const list = [...(e.target.files ?? [])].filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    e.target.value = '';
-    if (list.length) edit((x) => ({ ...x, newFiles: [...x.newFiles, ...list] }));
-  };
 
   const linked = tasks.filter((t) => d.links.includes(t.id));
   const addAction = () => {
@@ -246,27 +240,14 @@ export function MeetingPage() {
           {linked.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: '6px 0' }}>No linked tasks.</div>}
         </div>
 
-        <h3 style={{ display: 'flex', alignItems: 'center' }}>PDFs
-          <button className="btn ghost sm" style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0 }} onClick={() => fileRef.current?.click()}><IconPaperclip size={13} /> Attach PDF</button>
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" multiple hidden onChange={onFiles} />
-        </h3>
-        {files.map((a) => (
-          <div className="file" key={a.id}>
-            <span className="fi">PDF</span>
-            <button className="vbtn grow" style={{ margin: 0 }} onClick={() => act.openAttachment(a.path).catch((e) => toast.error(e.message))}>
-              <span className="ellipsis">{a.name}</span><span className="muted" style={{ fontSize: 11.5 }}>{formatBytes(a.size)}</span>
-            </button>
-            <button className="btn ghost icon sm" aria-label="Download" onClick={() => act.openAttachment(a.path, true)}><IconDownload size={14} /></button>
-            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, a.id] }))}><IconTrash size={14} /></button>
-          </div>
-        ))}
-        {d.newFiles.map((f, i) => (
-          <div className="file" key={`${f.name}-${i}`} style={{ borderStyle: 'dashed' }}>
-            <span className="fi">PDF</span>
-            <span className="grow ellipsis">{f.name} <span className="muted" style={{ fontSize: 11.5 }}>· {formatBytes(f.size)} · uploads when you save</span></span>
-            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}><IconX size={14} /></button>
-          </div>
-        ))}
+        <h3>Files</h3>
+        <Attachments
+          saved={m ? db.attachments.filter((a) => a.meeting_id === m.id) : []}
+          newFiles={d.newFiles} removed={d.removedFiles}
+          onAdd={(list) => edit((x) => ({ ...x, newFiles: [...x.newFiles, ...list] }))}
+          onRemoveSaved={(fid) => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, fid] }))}
+          onRemoveNew={(i) => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}
+        />
       </div>
 
       <div className="save-bar">

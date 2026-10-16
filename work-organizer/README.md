@@ -101,6 +101,7 @@ When an update adds new database fields, it comes with an `upgrade-N.sql` file i
 Paste it into Supabase → SQL Editor → Run (safe to run more than once), then let Vercel deploy.
 
 - [`supabase/upgrade-2.sql`](supabase/upgrade-2.sql) — times on dates, one-day checklist items, "due today" / "due soon" reminders.
+- [`supabase/upgrade-3.sql`](supabase/upgrade-3.sql) — image attachments (compressed in the browser before upload).
 
 ## Free-plan limits
 

@@ -5,7 +5,7 @@ import { Shell } from './components/Shell';
 import { applyTheme, type Theme } from './components/theme';
 import { configured, supabase } from './lib/supabase';
 import { registerServiceWorker, showLocal } from './lib/push';
-import { taskAlarms } from './lib/alarms';
+import { lateTitle, taskAlarms } from './lib/alarms';
 import { useToast } from './components/Toast';
 import { DataProvider, useData } from './store/data';
 import { UiProvider, useOpenTask } from './store/ui';
@@ -17,7 +17,17 @@ import { MeetingPage, MeetingsPage } from './pages/Meetings';
 import { TeamPage } from './pages/Team';
 import { SettingsPage } from './pages/Settings';
 
-/** While the app is open, fire this person's alarms on the exact minute. */
+const FIRED_KEY = 'fired-alarms';
+const readFired = (): string[] => { try { return JSON.parse(localStorage.getItem(FIRED_KEY) || '[]'); } catch { return []; } };
+const markFired = (keys: string[]) => {
+  try { localStorage.setItem(FIRED_KEY, JSON.stringify([...readFired(), ...keys].slice(-300))); } catch { /* ignore */ }
+};
+
+/**
+ * While the app is open, fire this person's alarms on the exact minute. An alarm whose time
+ * already passed (e.g. a task created 10 min before its deadline) fires right away instead of
+ * being skipped — once, and only the latest one for that moment.
+ */
 function useLocalAlarms() {
   const { tasks, me, meId } = useData();
   const toast = useToast();
@@ -25,14 +35,31 @@ function useLocalAlarms() {
   useEffect(() => {
     if (!me || !me.push_enabled) return;
     const now = Date.now();
+    const fired = new Set(readFired());
     const mine = tasks.filter((t) => t.assignees.includes(meId) || (!t.assignees.length && t.created_by === meId));
-    const timers = mine.flatMap(taskAlarms)
+    const all = mine.flatMap(taskAlarms)
+      .filter((a) => (a.key.startsWith('start:') ? me.remind_start !== false : a.key.startsWith('due:') ? me.remind_due_soon !== false : true))
+      .filter((a) => !fired.has(a.key));
+    const ring = (a: (typeof all)[number], title: string) => {
+      markFired([a.key]);
+      showLocal(title, a.body, `/tasks/all?task=${a.taskId}`, a.key);
+      toast.show(title, { label: 'Open', run: () => open(a.taskId) });
+    };
+
+    // Missed alarms (up to 30 min late): ring the latest one per moment now, mark the rest as done.
+    const late = all.filter((a) => a.at <= now && now - a.at < 30 * 60_000);
+    const byMoment = new Map<string, typeof late>();
+    for (const a of late) byMoment.set(a.moment, [...(byMoment.get(a.moment) ?? []), a]);
+    for (const list of byMoment.values()) {
+      const [pick, ...rest] = list.sort((x, y) => x.minutes - y.minutes);
+      markFired(rest.map((r) => r.key));
+      const t = mine.find((x) => x.id === pick.taskId);
+      ring(pick, lateTitle(pick, now, t?.title ?? ''));
+    }
+
+    const timers = all
       .filter((a) => a.at > now && a.at - now < 24 * 3600_000)
-      .filter((a) => (a.key.startsWith('start:') ? me.remind_start !== false : me.remind_due_soon !== false))
-      .map((a) => setTimeout(() => {
-        showLocal(a.title, a.body, `/tasks/all?task=${a.taskId}`, a.key);
-        toast.show(a.title, { label: 'Open', run: () => open(a.taskId) });
-      }, a.at - now));
+      .map((a) => setTimeout(() => ring(a, a.title), a.at - now));
     return () => timers.forEach(clearTimeout);
   }, [tasks, me, meId, toast, open]);
 }

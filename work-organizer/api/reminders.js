@@ -210,7 +210,7 @@ export default async function handlerFn(req, res) {
             msg = { heading: subject, sections, appUrl: url };
           }
         }
-        if (msg && await sendEmail({ to, subject, html: emailHtml(msg), text: emailText(msg) })) summary.emails++;
+        if (msg) { const r = await sendEmail({ to, subject, html: emailHtml(msg), text: emailText(msg) }); if (r === true) summary.emails++; else summary.emailError = r; }
       }
 
       // Desktop: a few individual pop-ups, then one summary.

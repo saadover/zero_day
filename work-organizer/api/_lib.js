@@ -48,8 +48,9 @@ export async function requireUser(req) {
 
 export const emailConfigured = () => Boolean(process.env.BREVO_API_KEY && process.env.MAIL_FROM_EMAIL);
 
+/** Sends one email. Returns true, or a string explaining why it failed. */
 export async function sendEmail({ to, subject, html, text }) {
-  if (!emailConfigured()) return false;
+  if (!emailConfigured()) return 'Email is not set up on the server (BREVO_API_KEY or MAIL_FROM_EMAIL missing in Vercel).';
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -62,8 +63,11 @@ export async function sendEmail({ to, subject, html, text }) {
     }),
   });
   if (!res.ok) {
-    console.error('Brevo error', res.status, await res.text());
-    return false;
+    const body = await res.text();
+    console.error('Brevo error', res.status, body);
+    let msg = body;
+    try { msg = JSON.parse(body).message || body; } catch { /* keep raw text */ }
+    return `Brevo refused the email (${res.status}): ${msg}`;
   }
   return true;
 }

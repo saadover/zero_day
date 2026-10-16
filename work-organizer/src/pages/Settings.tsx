@@ -86,8 +86,7 @@ export function SettingsPage() {
 
   const save = async () => {
     if (!d.full_name.trim()) { toast.error('Your name can’t be empty.'); return; }
-    if (d.notify_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.notify_email)) { toast.error('That notification email doesn’t look right.'); return; }
-    setBusy(true);
+        setBusy(true);
     const patch = Object.fromEntries(DRAFT_KEYS.filter((k) => d[k] !== saved[k]).map((k) => [k, k === 'full_name' ? d.full_name.trim() : d[k]]));
     await update('profiles', { id: me.id }, patch as Partial<Profile>);
     if (patch.theme) applyTheme(d.theme as Theme);
@@ -113,8 +112,8 @@ export function SettingsPage() {
     if (dirty) { toast.error('Save your changes first, then send the test.'); return; }
     setTesting(true);
     try {
-      const r = await callApi<{ email: string; push: number }>('/api/test-notify', {});
-      toast.show(`Test sent${r.email ? ` to ${r.email}` : ''}${r.push ? ` and ${r.push} device(s)` : ''}.`);
+      const r = await callApi<{ push: number }>('/api/test-notify', {});
+      toast.show(`Test sent to ${r.push} device(s).`);
     } catch (e) { toast.error((e as Error).message); }
     setTesting(false);
   };
@@ -152,12 +151,7 @@ export function SettingsPage() {
         <div className="card-box">
           <h2>Notifications</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <strong style={{ fontSize: 13, fontWeight: 500 }}>Where</strong>
-            <Toggle label="Email" checked={d.email_enabled} onChange={(v) => set({ email_enabled: v })} />
-            <label className="field" style={{ marginLeft: 23 }}>Send emails to
-              <input className="input" type="email" placeholder={`${me.email} (your login email)`} value={d.notify_email ?? ''}
-                onChange={(e) => set({ notify_email: e.target.value.trim() || null })} />
-            </label>
+            <strong style={{ fontSize: 13, fontWeight: 500 }}>Desktop notifications</strong>
             <Toggle label="Desktop notifications (all my devices)" hint="Turn off to pause pop-ups everywhere." checked={d.push_enabled} onChange={(v) => set({ push_enabled: v })} />
             <div className="row-gap" style={{ marginLeft: 23 }}>
               <span style={{ fontSize: 13 }}>This device: <b style={{ fontWeight: 500 }}>{push === 'on' ? 'on' : push === 'denied' ? 'blocked by the browser' : push === 'unsupported' ? 'not supported' : 'off'}</b></span>
@@ -175,7 +169,6 @@ export function SettingsPage() {
             <Toggle label="Due today" hint="When a task is due today and wasn't in the morning summary (e.g. added later)." checked={d.remind_due_today} onChange={(v) => set({ remind_due_today: v })} />
             <Toggle label="Start alarms" hint="When a task's do date has a time: “Time to start” at that time, plus any early alarms you tick on the task (15 min, 30 min, 1 h, 1 day before)." checked={d.remind_start} onChange={(v) => set({ remind_start: v })} />
             <Toggle label="Deadline alarms" hint="Before a deadline that has a time — 1 h before unless you choose other times on the task." checked={d.remind_due_soon} onChange={(v) => set({ remind_due_soon: v })} />
-            <Toggle label="Send alarms by email too" hint="Alarms always pop up on your desktop; tick this to also get each one by email." checked={d.alarm_email} onChange={(v) => set({ alarm_email: v })} />
             <Toggle label="High-priority deadline tomorrow" checked={d.remind_due_tomorrow} onChange={(v) => set({ remind_due_tomorrow: v })} />
             <Toggle label="Task became overdue" hint="Once per task." checked={d.remind_overdue} onChange={(v) => set({ remind_overdue: v })} />
             <Toggle label="Follow-up day" hint="“Today, chase Sarah about the contract.”" checked={d.remind_followups} onChange={(v) => set({ remind_followups: v })} />

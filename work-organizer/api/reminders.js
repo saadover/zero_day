@@ -208,7 +208,7 @@ export default async function handlerFn(req, res) {
       const to = p.notify_email || p.email;
 
       // Email: one message per run per person.
-      if (p.email_enabled && emailConfigured()) {
+      if (false) { // email removed — desktop notifications only
         let msg; let subject;
         if (digest) {
           const bits = [digest.today && `${digest.today} today`, digest.overdue && `${digest.overdue} overdue`, digest.follow && `${digest.follow} to chase`].filter(Boolean);

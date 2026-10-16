@@ -8,6 +8,7 @@ import { useData } from '../store/data';
 import { useOpenTask } from '../store/ui';
 import { Avatars, TagChip } from './Atoms';
 import { useToast } from './Toast';
+import { sameTaskHover, taskColor } from '../lib/taskColor';
 import { PriorityIcon, StatusIcon } from './Icons';
 import { SelectMenu, useAnchor } from './Popover';
 
@@ -52,6 +53,7 @@ export function TaskRow({ task, showCategory = true, dateField = 'deadline', rig
     <div
       className={`trow ${compact ? 'compact' : ''} ${openId === task.id ? 'sel' : ''}`} role="button" tabIndex={0}
       onClick={() => open(task.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(task.id); }}
+      style={{ boxShadow: `inset 3px 0 0 ${taskColor(task.id)}` }} {...sameTaskHover(task.id)}
     >
       <StatusButton task={task} />
       <PriorityIcon priority={task.priority} />

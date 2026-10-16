@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Shell } from './components/Shell';
@@ -6,6 +6,11 @@ import { applyTheme, type Theme } from './components/theme';
 import { configured, supabase } from './lib/supabase';
 import { registerServiceWorker, showLocal } from './lib/push';
 import { lateTitle, taskAlarms } from './lib/alarms';
+import { today } from './lib/dates';
+import { atToday, claimRun, happensOn, runOf, visibleTo } from './lib/routines';
+import type { Routine } from './lib/types';
+import { firstName } from './components/Atoms';
+import { RoutinesPage } from './pages/Routines';
 import { useToast } from './components/Toast';
 import { DataProvider, useData } from './store/data';
 import { UiProvider, useOpenTask } from './store/ui';
@@ -64,10 +69,73 @@ function useLocalAlarms() {
   }, [tasks, me, meId, toast, open]);
 }
 
+/**
+ * Repeating reminders: ring at their time on their days. A team reminder that someone
+ * already picked up (or finished) stays quiet; the toast offers "I'm on it".
+ */
+function useRoutineAlarms() {
+  const { db, me, meId, personById, reload } = useData();
+  const toast = useToast();
+  const latest = useRef(db.routine_runs);
+  latest.current = db.routine_runs;
+  useEffect(() => {
+    if (!me || !me.push_enabled) return;
+    const now = Date.now();
+    const day = today();
+    const fired = new Set(readFired());
+    const list = visibleTo(db.routines, meId).filter((r) => happensOn(r, day));
+    const ring = (r: Routine) => {
+      const key = `routine:${r.id}:${day}`;
+      if (readFired().includes(key)) return;
+      markFired([key]);
+      const run = runOf(latest.current, r.id, day);
+      if (run?.done_by || (run?.claimed_by && run.claimed_by !== meId)) return; // someone has it
+      const title = r.scope === 'team' ? `Team reminder: ${r.title}` : `Reminder: ${r.title}`;
+      showLocal(title, r.scope === 'team' ? 'Click “I’m on it” in the app so nobody does it twice.' : r.notes, '/reminders', key);
+      toast.show(title, r.scope === 'team'
+        ? { label: 'I’m on it', run: async () => {
+          const other = await claimRun(r.id, day, meId);
+          await reload('routine_runs');
+          if (other) toast.error(`${firstName(personById.get(other))} is already on it.`);
+        } }
+        : undefined);
+    };
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const r of list) {
+      const at = atToday(r, day);
+      const key = `routine:${r.id}:${day}`;
+      if (fired.has(key)) continue;
+      if (at <= now && now - at < 30 * 60_000) ring(r);
+      else if (at > now) timers.push(setTimeout(() => ring(r), at - now));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [db.routines, me, meId, toast, personById, reload]);
+
+  // Tell everyone when a teammate picks up or finishes a team reminder.
+  const prev = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    const day = today();
+    const state = new Map(db.routine_runs.filter((x) => x.day === day)
+      .map((x) => [x.routine_id, `${x.claimed_by ?? ''}|${x.done_by ?? ''}`]));
+    if (prev.current) {
+      for (const [id, st] of state) {
+        if (prev.current.get(id) === st) continue;
+        const r = db.routines.find((x) => x.id === id);
+        const [claimed, done] = st.split('|');
+        if (!r || r.scope !== 'team') continue;
+        if (done && done !== meId) toast.show(`${firstName(personById.get(done))} finished “${r.title}”`);
+        else if (claimed && !done && claimed !== meId) toast.show(`${firstName(personById.get(claimed))} is on “${r.title}”`);
+      }
+    }
+    prev.current = state;
+  }, [db.routine_runs, db.routines, meId, personById, toast]);
+}
+
 function Workspace() {
   const { ready, me, update } = useData();
   const [pwDone, setPwDone] = useState(false);
   useLocalAlarms();
+  useRoutineAlarms();
 
   // Keep profile time zone + theme in sync with this browser.
   useEffect(() => {
@@ -95,6 +163,7 @@ function Workspace() {
         <Route path="/team/workload" element={<WorkloadPage />} />
         <Route path="/matrix" element={<MatrixPage />} />
         <Route path="/checklist" element={<ChecklistPage />} />
+        <Route path="/reminders" element={<RoutinesPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/people" element={<TeamPage />} />

@@ -4,6 +4,8 @@ import { firstName } from '../components/Atoms';
 import { IconPlus } from '../components/Icons';
 import { TaskRow } from '../components/TaskRow';
 import { ChecklistBlock } from './Checklist';
+import { RoutineToday } from './Routines';
+import { atToday, happensOn, visibleTo } from '../lib/routines';
 import { fmtDay, fmtLongToday, fmtTime, greeting, today } from '../lib/dates';
 import { runView, viewById, viewFilters } from '../lib/tasks';
 import { useData } from '../store/data';
@@ -35,6 +37,7 @@ export function Dashboard() {
   const top = useMemo(() => tasks.filter((t) => t.status !== 'Done' && t.assignees.includes(meId))
     .sort((a, b) => b.urgency - a.urgency).slice(0, 3), [tasks, meId]);
 
+  const routinesToday = visibleTo(db.routines, meId).filter((r) => happensOn(r, today())).sort((a, b) => atToday(a) - atToday(b));
   const upcoming = db.meetings.filter((m) => m.starts_at.slice(0, 10) >= today())
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, 3);
   const linkedCount = (id: string) => db.meeting_tasks.filter((x) => x.meeting_id === id).length;
@@ -91,6 +94,12 @@ export function Dashboard() {
         </div>
 
         <aside className="dash-side">
+          {routinesToday.length > 0 && (
+            <section>
+              <div className="sec-h"><h2>Reminders today</h2><span className="n">{routinesToday.length}</span><Link to="/reminders">All</Link></div>
+              <div className="list flat">{routinesToday.map((r) => <RoutineToday key={r.id} r={r} compact />)}</div>
+            </section>
+          )}
           <ChecklistBlock compact />
           <section>
             <div className="sec-h"><h2>Meetings</h2><Link to="/meetings">All notes</Link></div>

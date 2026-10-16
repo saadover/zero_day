@@ -62,6 +62,11 @@ export default async function handlerFn(req, res) {
       db.from('push_subscriptions').select('*'),
       db.from('notifications').select('*').is('sent_at', null),
     ]);
+    // Repeating reminders (table may not exist before upgrade-4).
+    const rq = await db.from('routines').select('*').eq('active', true);
+    const routines = rq.error ? [] : rq.data ?? [];
+    const runq = routines.length ? await db.from('routine_runs').select('*').gte('day', new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10)) : { data: [] };
+    const runs = runq.data ?? [];
     const { data: logRows } = await db.from('reminder_log').select('user_id, key').gte('sent_at', new Date(Date.now() - 45 * DAY).toISOString());
     const logged = new Set((logRows ?? []).map((r) => `${r.user_id}|${r.key}`));
 
@@ -137,6 +142,21 @@ export default async function handlerFn(req, res) {
             newLog.push({ user_id: p.id, key: todayKey });
           }
         }
+      }
+
+      // Repeating reminders: at their time on their days. Team ones skip if someone already has it.
+      const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(now.weekday);
+      for (const r of routines) {
+        if (!(r.scope === 'team' || r.owner_id === p.id) || !(r.days ?? []).includes(dow)) continue;
+        const key = `routine:${r.id}:${now.date}`;
+        const left = mins(hm(r.at_time)) - nowMin;
+        if (left > 0 || left <= -30 || has(key)) continue;
+        const run = runs.find((x) => x.routine_id === r.id && x.day === now.date);
+        logged.add(`${p.id}|${key}`); newLog.push({ user_id: p.id, key });
+        if (run?.done_by || (run?.claimed_by && run.claimed_by !== p.id)) continue;
+        alerts.push({ key, alarm: true, always: true, logged: true, url: `${url}/reminders`, section: 'Reminders',
+          title: r.scope === 'team' ? `Team reminder: ${r.title}` : `Reminder: ${r.title}`,
+          body: r.scope === 'team' ? 'Open the app and click “I’m on it” so nobody does it twice.' : r.notes || '' });
       }
 
       if (!quiet) {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { today } from '../lib/dates';
 import { runView, viewById, viewFilters, VIEWS } from '../lib/tasks';
+import { happensOn, runOf, visibleTo } from '../lib/routines';
 import { supabase } from '../lib/supabase';
 import { useData } from '../store/data';
 import { useOpenTask, useUi } from '../store/ui';
@@ -107,6 +108,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const activeItems = db.checklist_items.filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId) && (!i.only_day || i.only_day === t));
   const checked = db.checklist_checks.filter((c) => c.day === t && activeItems.some((i) => i.id === c.item_id)).length;
   const others = online.map((o) => o.userId).filter((id) => id !== meId);
+  const todaysRoutines = visibleTo(db.routines, meId).filter((r) => happensOn(r, t)
+    && !runOf(db.routine_runs, r.id, t)?.done_by).length;
 
   return (
     <div className="shell">
@@ -141,6 +144,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Nav to="/calendar" icon={<IconCalendar />} label="My calendar" />
         <Nav to="/matrix" icon={<IconGrid />} label="Urgent / Important" />
         <Nav to="/checklist" icon={<IconChecklist />} label="Daily checklist" count={activeItems.length ? `${checked}/${activeItems.length}` : ''} />
+        <Nav to="/reminders" icon={<IconBell />} label="Reminders" count={todaysRoutines || ''} />
         <Nav to="/meetings" icon={<IconNotes />} label="Meetings" />
 
         <div className="side-label">Team</div>

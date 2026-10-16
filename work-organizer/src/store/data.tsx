@@ -10,7 +10,7 @@ type DB = { [K in TableName]: Tables[K][] };
 const TABLES: TableName[] = [
   'profiles', 'tags', 'tasks', 'task_assignees', 'task_tags', 'subtasks', 'task_blockers',
   'meetings', 'meeting_actions', 'meeting_tasks', 'attachments', 'checklist_items',
-  'checklist_checks', 'notifications',
+  'checklist_checks', 'notifications', 'routines', 'routine_runs',
 ];
 
 const KEYS: Record<TableName, string[]> = {
@@ -18,6 +18,7 @@ const KEYS: Record<TableName, string[]> = {
   task_tags: ['task_id', 'tag_id'], subtasks: ['id'], task_blockers: ['task_id', 'blocked_by'],
   meetings: ['id'], meeting_actions: ['id'], meeting_tasks: ['meeting_id', 'task_id'], attachments: ['id'],
   checklist_items: ['id'], checklist_checks: ['item_id', 'day'], notifications: ['id'],
+  routines: ['id'], routine_runs: ['routine_id', 'day'],
 };
 
 const emptyDB = (): DB => Object.fromEntries(TABLES.map((t) => [t, []])) as unknown as DB;
@@ -39,6 +40,8 @@ async function fetchAll(table: TableName): Promise<Row[]> {
   const out: Row[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from(table).select('*').range(from, from + 999);
+    // A table from a newer upgrade that hasn't been run yet: treat as empty instead of failing.
+    if (error && (error.code === 'PGRST205' || error.code === '42P01')) return [];
     if (error) throw error;
     out.push(...(data as Row[]));
     if (!data || data.length < 1000) return out;

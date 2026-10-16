@@ -35,6 +35,7 @@ function Palette({ close }: { close: () => void }) {
       { id: 'cal', label: 'Go to My calendar', icon: <IconCalendar />, run: go('/calendar') },
       { id: 'matrix', label: 'Go to Urgent / Important', icon: <IconGrid />, run: go('/matrix'), keywords: 'eisenhower' },
       { id: 'check', label: 'Go to Daily checklist', icon: <IconChecklist />, run: go('/checklist') },
+      { id: 'rem', label: 'Go to Reminders', icon: <IconChecklist />, run: go('/reminders'), keywords: 'repeating daily routine alarm' },
       { id: 'meet', label: 'Go to Meetings', icon: <IconNotes />, run: go('/meetings') },
       { id: 'team', label: 'Go to Team tasks', icon: <IconUsers />, run: go('/team/list'), keywords: 'everyone colleagues' },
       { id: 'teamcal', label: 'Go to Team calendar', icon: <IconCalendar />, run: go('/team/calendar'), keywords: 'everyone colleagues' },

@@ -149,6 +149,28 @@ export interface AppNotification {
   read_at: string | null;
 }
 
+export interface Routine {
+  id: string;
+  title: string;
+  notes: string;
+  at_time: string;
+  days: number[];
+  scope: 'personal' | 'team';
+  owner_id: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface RoutineRun {
+  routine_id: string;
+  day: string;
+  claimed_by: string | null;
+  claimed_at: string | null;
+  done_by: string | null;
+  done_at: string | null;
+}
+
 export interface Tables {
   profiles: Profile;
   tags: Tag;
@@ -164,6 +186,8 @@ export interface Tables {
   checklist_items: ChecklistItem;
   checklist_checks: ChecklistCheck;
   notifications: AppNotification;
+  routines: Routine;
+  routine_runs: RoutineRun;
 }
 
 export type TableName = keyof Tables;

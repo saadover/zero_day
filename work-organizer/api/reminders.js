@@ -35,9 +35,10 @@ function fmtDay(d) {
 }
 
 export default async function handlerFn(req, res) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.authorization || '';
-  if (!secret || auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'unauthorized' });
+  const secret = (process.env.CRON_SECRET || '').trim().replace(/^["']|["']$/g, '');
+  const auth = (req.headers.authorization || '').trim();
+  if (!secret) return res.status(500).json({ error: 'CRON_SECRET is not set in Vercel (or Vercel was not redeployed after adding it).' });
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: `unauthorized: the secret sent does not match CRON_SECRET in Vercel (server has ${secret.length} characters)` });
 
   try {
     const db = admin();

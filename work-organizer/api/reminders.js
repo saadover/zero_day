@@ -35,10 +35,22 @@ function fmtDay(d) {
 }
 
 export default async function handlerFn(req, res) {
-  const secret = (process.env.CRON_SECRET || '').trim().replace(/^["']|["']$/g, '');
-  const auth = (req.headers.authorization || '').trim();
-  if (!secret) return res.status(500).json({ error: 'CRON_SECRET is not set in Vercel (or Vercel was not redeployed after adding it).' });
-  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: `unauthorized: the secret sent does not match CRON_SECRET in Vercel (server has ${secret.length} characters)` });
+  // The job's password: stored in the database by supabase/cron.sql (no Vercel variable needed).
+  // CRON_SECRET in Vercel, if set, also works (used by Vercel's own daily backup run).
+  const auth = (req.headers.authorization || '').trim().replace(/^Bearer\s+/i, '');
+  if (!auth) return res.status(401).json({ error: 'unauthorized' });
+  let ok = false;
+  const envSecret = (process.env.CRON_SECRET || '').trim();
+  if (envSecret && auth === envSecret) ok = true;
+  if (!ok) {
+    try {
+      const { data } = await admin().from('app_settings').select('value').eq('key', 'cron_secret').maybeSingle();
+      ok = !!data?.value && data.value === auth;
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+  if (!ok) return res.status(401).json({ error: 'unauthorized: run supabase/cron.sql again in Supabase' });
 
   try {
     const db = admin();

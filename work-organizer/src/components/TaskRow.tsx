@@ -32,8 +32,8 @@ export function StatusButton({ task }: { task: Task }) {
   );
 }
 
-export function TaskRow({ task, showCategory = true, dateField = 'deadline', right }: {
-  task: Task; showCategory?: boolean; dateField?: 'deadline' | 'do_date' | 'follow_up_date'; right?: ReactNode;
+export function TaskRow({ task, showCategory = true, dateField = 'deadline', right, compact }: {
+  task: Task; showCategory?: boolean; compact?: boolean; dateField?: 'deadline' | 'do_date' | 'follow_up_date'; right?: ReactNode;
 }) {
   const { personById, db } = useData();
   const { openId, open } = useOpenTask();
@@ -43,7 +43,7 @@ export function TaskRow({ task, showCategory = true, dateField = 'deadline', rig
 
   return (
     <div
-      className={`trow ${openId === task.id ? 'sel' : ''}`} role="button" tabIndex={0}
+      className={`trow ${compact ? 'compact' : ''} ${openId === task.id ? 'sel' : ''}`} role="button" tabIndex={0}
       onClick={() => open(task.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(task.id); }}
     >
       <StatusButton task={task} />

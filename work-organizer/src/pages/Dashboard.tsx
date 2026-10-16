@@ -76,14 +76,14 @@ export function Dashboard() {
           <div className="two">
             <Section title="Follow-ups" viewId="followups" count={v('followups').length}>
               <div className="list flat">
-                {follow.map((t) => <TaskRow key={t.id} task={t} dateField="follow_up_date" showCategory={false}
-                  right={t.follow_up_with ? <span className="meta">↻ {t.follow_up_with}</span> : null} />)}
+                {follow.map((t) => <TaskRow key={t.id} task={t} dateField="follow_up_date" compact
+                  right={t.follow_up_with ? <span className="who">{t.follow_up_with}</span> : null} />)}
                 {follow.length === 0 && <div className="empty">No one to chase.</div>}
               </div>
             </Section>
             <Section title="New from manager" viewId="assign" count={assign.length}>
               <div className="list flat">
-                {assign.slice(0, 6).map((t) => <TaskRow key={t.id} task={t} showCategory={false} />)}
+                {assign.slice(0, 6).map((t) => <TaskRow key={t.id} task={t} compact />)}
                 {assign.length === 0 && <div className="empty">Everything from your manager is assigned.</div>}
               </div>
             </Section>
@@ -103,7 +103,7 @@ export function Dashboard() {
                 </span>
                 <span className="grow">
                   <span className="title" style={{ display: 'block' }}>{m.title}</span>
-                  <span className="meta">{linkedCount(m.id)} linked tasks{m.attendees ? ` · ${m.attendees}` : ''}</span>
+                  <span className="meta">{linkedCount(m.id)} linked {linkedCount(m.id) === 1 ? 'task' : 'tasks'}{m.attendees ? ` · ${m.attendees}` : ''}</span>
                 </span>
               </Link>
             ))}

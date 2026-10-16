@@ -32,7 +32,7 @@ export function MeetingsPage() {
       <span className="mono" style={{ width: 110, fontSize: 12 }}>{fmtDay(m.starts_at.slice(0, 10))}</span>
       <span className="mono muted" style={{ width: 44, fontSize: 12 }}>{fmtTime(m.starts_at)}</span>
       <span className="title">{m.title}</span>
-      <span className="meta">{db.meeting_tasks.filter((x) => x.meeting_id === m.id).length + db.meeting_actions.filter((a) => a.meeting_id === m.id && a.task_id).length} tasks</span>
+      <span className="meta">{db.meeting_tasks.filter((x) => x.meeting_id === m.id).length} linked</span>
       <span className="meta ellipsis" style={{ maxWidth: 200 }}>{m.attendees}</span>
       <span className="meta">{firstName(personById.get(m.created_by ?? ''))}</span>
     </Link>

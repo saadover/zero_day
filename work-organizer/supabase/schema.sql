@@ -30,6 +30,12 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- "brahim.saadi101@x.com" → "Brahim Saadi"
+create or replace function public.name_from_email(email text)
+returns text language sql immutable as $$
+  select coalesce(nullif(initcap(trim(regexp_replace(regexp_replace(split_part(email, '@', 1), '\d+', '', 'g'), '[._-]+', ' ', 'g'))), ''), split_part(email, '@', 1));
+$$;
+
 -- Create a profile automatically for every new login
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -38,7 +44,7 @@ begin
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
+    coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), public.name_from_email(new.email)),
     coalesce((new.raw_user_meta_data ->> 'must_change_password')::boolean, false)
   )
   on conflict (id) do nothing;
@@ -52,7 +58,7 @@ create trigger on_auth_user_created
 
 -- Backfill profiles for users created before this script ran
 insert into public.profiles (id, email, full_name)
-select u.id, u.email, split_part(u.email, '@', 1) from auth.users u
+select u.id, u.email, public.name_from_email(u.email) from auth.users u
 on conflict (id) do nothing;
 
 -- ───────────────────────────── Tasks ─────────────────────────────

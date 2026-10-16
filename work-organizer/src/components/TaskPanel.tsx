@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { dueLabel, fmtDay, timeAgo } from '../lib/dates';
 import { isOverdue } from '../lib/tasks';
@@ -70,6 +70,13 @@ function PanelBody({ task }: { task: Task }) {
   const title = useDraft(task.title, (v) => v.trim() && act.updateTask(task.id, { title: v.trim() }));
   const notes = useDraft(task.notes, (v) => act.updateTask(task.id, { notes: v }));
   const followWith = useDraft(task.follow_up_with ?? '', (v) => act.updateTask(task.id, { follow_up_with: v.trim() || null }));
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 36)}px`;
+  }, [title.value]);
   const [newSub, setNewSub] = useState('');
   const [newTag, setNewTag] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,8 +146,7 @@ function PanelBody({ task }: { task: Task }) {
       )}
 
       <textarea
-        className="panel-title" rows={1} {...title} aria-label="Task title"
-        ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }}
+        className="panel-title" rows={1} {...title} aria-label="Task title" ref={titleRef}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
       />
 

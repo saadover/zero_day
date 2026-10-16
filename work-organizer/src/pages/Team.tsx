@@ -80,7 +80,7 @@ function Tags() {
         {db.tags.map((t) => (
           <div className="chk" key={t.id}>
             <TagChip tag={t} />
-            <span className="muted mono" style={{ fontSize: 11.5 }}>{counts(t.id)} tasks</span>
+            <span className="muted mono" style={{ fontSize: 11.5 }}>{counts(t.id)} {counts(t.id) === 1 ? 'task' : 'tasks'}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
               {TAG_COLORS.map((c) => (
                 <button key={c} aria-label={`Colour ${c}`} onClick={() => update('tags', { id: t.id }, { color: c as TagColor })}

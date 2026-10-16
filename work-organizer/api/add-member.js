@@ -1,5 +1,7 @@
 import { handler, HttpError, requireUser } from './_lib.js';
 
+const nameFromEmail = (e) => e.split('@')[0].replace(/\d+/g, '').split(/[._-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') || e.split('@')[0];
+
 const COLORS = ['#2F5FD0', '#0F766E', '#9A3412', '#7C3AED', '#BE185D', '#4D7C0F', '#0369A1', '#A16207'];
 
 // Any team member can create a login for a new teammate.
@@ -15,7 +17,7 @@ export default handler(async (req) => {
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: fullName || email.split('@')[0], must_change_password: true },
+    user_metadata: { full_name: fullName || nameFromEmail(email), must_change_password: true },
   });
   if (error) {
     if (/already/i.test(error.message)) throw new HttpError(409, 'Someone with that email already has a login.');
@@ -26,7 +28,7 @@ export default handler(async (req) => {
   await db.from('profiles').upsert({
     id: data.user.id,
     email,
-    full_name: fullName || email.split('@')[0],
+    full_name: fullName || nameFromEmail(email),
     must_change_password: true,
     color: COLORS[(count ?? 0) % COLORS.length],
   });

@@ -31,12 +31,15 @@ function Palette({ close }: { close: () => void }) {
       { id: 'new', label: 'New task', hint: 'N', icon: <IconPlus />, run: () => openQuickAdd() },
       { id: 'dash', label: 'Go to Dashboard', icon: <IconHome />, run: go('/') },
       ...VIEWS.map((v) => ({ id: `v-${v.id}`, label: `View: ${v.name}`, icon: <IconList />, run: go(`/tasks/${v.id}`), keywords: v.hint })),
-      { id: 'board', label: 'Go to Board', icon: <IconBoard />, run: go('/board') },
-      { id: 'cal', label: 'Go to Calendar', icon: <IconCalendar />, run: go('/calendar') },
+      { id: 'board', label: 'Go to My board', icon: <IconBoard />, run: go('/board') },
+      { id: 'cal', label: 'Go to My calendar', icon: <IconCalendar />, run: go('/calendar') },
       { id: 'matrix', label: 'Go to Urgent / Important', icon: <IconGrid />, run: go('/matrix'), keywords: 'eisenhower' },
       { id: 'check', label: 'Go to Daily checklist', icon: <IconChecklist />, run: go('/checklist') },
       { id: 'meet', label: 'Go to Meetings', icon: <IconNotes />, run: go('/meetings') },
-      { id: 'team', label: 'Go to Team', icon: <IconUsers />, run: go('/team'), keywords: 'members add person' },
+      { id: 'team', label: 'Go to Team tasks', icon: <IconUsers />, run: go('/team/list'), keywords: 'everyone colleagues' },
+      { id: 'teamcal', label: 'Go to Team calendar', icon: <IconCalendar />, run: go('/team/calendar'), keywords: 'everyone colleagues' },
+      { id: 'workload', label: 'Go to Workload', icon: <IconGrid />, run: go('/team/workload'), keywords: 'busy capacity' },
+      { id: 'people', label: 'Go to People', icon: <IconUsers />, run: go('/people'), keywords: 'members add person login' },
       { id: 'settings', label: 'Settings', icon: <IconSettings />, run: go('/settings'), keywords: 'password notifications email' },
       { id: 'theme', label: 'Switch light / dark', icon: <IconMoon />, run: () => {
         const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';

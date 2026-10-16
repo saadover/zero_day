@@ -88,16 +88,42 @@ export function timeAgo(iso: string): string {
 
 export type DueTone = '' | 'soon' | 'late';
 
-/** Text + tone for a deadline relative to today. */
-export function dueLabel(deadline: string | null, done = false): { text: string; tone: DueTone } {
-  if (!deadline) return { text: '', tone: '' };
-  if (done) return { text: fmtDay(deadline), tone: '' };
-  const n = diffDays(today(), deadline);
+/** "15:00:00" → "15:00" */
+export const hhmm = (t: string | null | undefined) => (t ? t.slice(0, 5) : '');
+
+export function nowTime(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+const minutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+/** Has this date (+ optional time) already passed? */
+export function isPast(date: string | null, time?: string | null): boolean {
+  if (!date) return false;
+  const t = today();
+  if (date < t) return true;
+  return date === t && !!time && hhmm(time) <= nowTime();
+}
+
+/** Text + tone for a date (and optional time) relative to now. */
+export function dueLabel(date: string | null, done = false, time?: string | null): { text: string; tone: DueTone } {
+  if (!date) return { text: '', tone: '' };
+  const tm = hhmm(time);
+  if (done) return { text: `${fmtDay(date)}${tm ? ` ${tm}` : ''}`, tone: '' };
+  const n = diffDays(today(), date);
   if (n < 0) return { text: n === -1 ? '1 day late' : `${-n} days late`, tone: 'late' };
-  if (n === 0) return { text: 'Today', tone: 'soon' };
-  if (n === 1) return { text: 'Tomorrow', tone: 'soon' };
-  if (n <= 6) return { text: `${n} days left`, tone: '' };
-  return { text: fmtDay(deadline), tone: '' };
+  if (n === 0) {
+    if (!tm) return { text: 'Today', tone: 'soon' };
+    const left = minutes(tm) - minutes(nowTime());
+    if (left <= 0) return { text: `Late · ${tm}`, tone: 'late' };
+    if (left < 60) return { text: `In ${left} min`, tone: 'late' };
+    if (left < 180) return { text: `In ${Math.round(left / 60)} h · ${tm}`, tone: 'soon' };
+    return { text: `Today ${tm}`, tone: 'soon' };
+  }
+  if (n === 1) return { text: `Tomorrow${tm ? ` ${tm}` : ''}`, tone: 'soon' };
+  if (n <= 6) return { text: tm ? `${fmtDay(date).split(' ')[0]} ${tm}` : `${n} days left`, tone: '' };
+  return { text: `${fmtDay(date)}${tm ? ` ${tm}` : ''}`, tone: '' };
 }
 
 export function greeting(): string {

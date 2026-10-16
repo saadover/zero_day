@@ -9,7 +9,7 @@ import { DataProvider, useData } from './store/data';
 import { UiProvider } from './store/ui';
 import { ForcePasswordChange, Login, NotConfigured } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
-import { BoardPage, CalendarPage, MatrixPage, TasksPage } from './pages/TaskPages';
+import { BoardPage, CalendarPage, MatrixPage, TasksPage, TeamListPage, WorkloadPage } from './pages/TaskPages';
 import { ChecklistPage } from './pages/Checklist';
 import { MeetingPage, MeetingsPage } from './pages/Meetings';
 import { TeamPage } from './pages/Team';
@@ -37,13 +37,18 @@ function Workspace() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/tasks" element={<Navigate to="/tasks/all" replace />} />
         <Route path="/tasks/:viewId" element={<TasksPage />} />
-        <Route path="/board" element={<BoardPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/board" element={<BoardPage key="me" />} />
+        <Route path="/calendar" element={<CalendarPage key="me" />} />
+        <Route path="/team/list" element={<TeamListPage />} />
+        <Route path="/team/calendar" element={<CalendarPage key="team" scope="team" />} />
+        <Route path="/team/board" element={<BoardPage key="team" scope="team" />} />
+        <Route path="/team/workload" element={<WorkloadPage />} />
         <Route path="/matrix" element={<MatrixPage />} />
         <Route path="/checklist" element={<ChecklistPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
-        <Route path="/team" element={<TeamPage />} />
+        <Route path="/people" element={<TeamPage />} />
+        <Route path="/team" element={<Navigate to="/team/list" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

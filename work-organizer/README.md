@@ -10,7 +10,7 @@ desktop reminders. Runs free on **Supabase** (database, logins, live sync, files
 | Area | Highlights |
 |---|---|
 | Tasks | Status, priority, assignees (several people), given by, category, colour tags, do date, deadline, follow-up date/person, notes, subtasks, "blocked by", PDFs, "remind me" |
-| Views | Today · Overdue · This week · Follow-ups · To assign · My tasks · Everyone · Done · All — each with a filter bar (pick the date field and any range: today, this/next week, next 7 days, this/next month, before today, custom) |
+| Views | My work: Today · Overdue · This week · Follow-ups · My tasks · Done (yours by default) · Team: team tasks by person, team calendar coloured by person (month/week), team board, workload grid, To assign, All — each with a filter bar (pick the date field and any range: today, this/next week, next 7 days, this/next month, before today, custom) |
 | Layouts | List (group by status/priority/person/category/tag), Board (drag between columns), Calendar (drag to reschedule), Urgent/Important grid |
 | Sorting | Automatic **urgency score** (priority + how close/late the deadline is + blocked/waiting) |
 | Speed | Type tasks in plain English: `Send budget to Karim fri !high #finance @lina` · `N` new task · `Ctrl K` search everything · `g d` / `g t` / `g b` / `g c` jump around |
@@ -94,6 +94,13 @@ Log in, open **Settings → Notifications**, switch on **Desktop notifications o
 press **Send me a test notification**. Then go to **Team** to add your colleagues.
 
 ---
+
+## Upgrading an existing install
+
+When an update adds new database fields, it comes with an `upgrade-N.sql` file in `supabase/`.
+Paste it into Supabase → SQL Editor → Run (safe to run more than once), then let Vercel deploy.
+
+- [`supabase/upgrade-2.sql`](supabase/upgrade-2.sql) — times on dates, one-day checklist items, "due today" / "due soon" reminders.
 
 ## Free-plan limits
 

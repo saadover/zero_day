@@ -1,14 +1,14 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { today } from '../lib/dates';
-import { isOverdue, runView, viewById, viewFilters, VIEWS } from '../lib/tasks';
+import { runView, viewById, viewFilters, VIEWS } from '../lib/tasks';
 import { supabase } from '../lib/supabase';
 import { useData } from '../store/data';
 import { useOpenTask, useUi } from '../store/ui';
 import { Avatar, Avatars } from './Atoms';
 import { CommandPalette } from './CommandPalette';
 import {
-  IconBell, IconBoard, IconCalendar, IconChecklist, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
+  IconBell, IconBoard, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
   IconSearch, IconSettings, IconUsers,
 } from './Icons';
 import { Popover, useAnchor } from './Popover';
@@ -87,7 +87,7 @@ export function Shell({ children }: { children: ReactNode }) {
       else if (e.key === '/') { e.preventDefault(); setPaletteOpen(true); }
       else if (e.key === 'g') { g = true; setTimeout(() => { g = false; }, 800); }
       else if (g) {
-        const to = { d: '/', t: '/tasks/today', b: '/board', c: '/calendar', m: '/meetings', l: '/checklist' }[e.key];
+        const to = { d: '/', t: '/tasks/today', b: '/board', c: '/calendar', m: '/meetings', l: '/checklist', w: '/team/list' }[e.key];
         if (to) { navigate(to); g = false; }
       }
     };
@@ -99,13 +99,12 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const v of VIEWS) if (v.id !== 'all' && v.id !== 'done' && v.id !== 'everyone') c[v.id] = runView(tasks, viewById(v.id), viewFilters(v), meId).length;
+    for (const v of VIEWS) if (v.id !== 'all' && v.id !== 'done') c[v.id] = runView(tasks, viewById(v.id), viewFilters(v), meId).length;
     return c;
   }, [tasks, meId]);
-  const overdue = tasks.filter(isOverdue).length;
 
   const t = today();
-  const activeItems = db.checklist_items.filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId));
+  const activeItems = db.checklist_items.filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId) && (!i.only_day || i.only_day === t));
   const checked = db.checklist_checks.filter((c) => c.day === t && activeItems.some((i) => i.id === c.item_id)).length;
   const others = online.map((o) => o.userId).filter((id) => id !== meId);
 
@@ -132,21 +131,28 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <Nav to="/" end icon={<IconHome />} label="Dashboard" />
         <Bell />
-        <Nav to="/tasks/all" icon={<IconList />} label="All tasks" count={tasks.filter((x) => x.status !== 'Done').length} />
-        <Nav to="/board" icon={<IconBoard />} label="Board" />
-        <Nav to="/calendar" icon={<IconCalendar />} label="Calendar" />
+
+        <div className="side-label">My work</div>
+        {VIEWS.filter((v) => ['today', 'overdue', 'week', 'followups', 'mine', 'done'].includes(v.id)).map((v) => (
+          <Nav key={v.id} to={`/tasks/${v.id}`} icon={<span style={{ width: 16 }} />} label={v.name}
+            count={counts[v.id]} red={v.id === 'overdue'} />
+        ))}
+        <Nav to="/board" icon={<IconBoard />} label="My board" />
+        <Nav to="/calendar" icon={<IconCalendar />} label="My calendar" />
         <Nav to="/matrix" icon={<IconGrid />} label="Urgent / Important" />
         <Nav to="/checklist" icon={<IconChecklist />} label="Daily checklist" count={activeItems.length ? `${checked}/${activeItems.length}` : ''} />
         <Nav to="/meetings" icon={<IconNotes />} label="Meetings" />
 
-        <div className="side-label">Views</div>
-        {VIEWS.filter((v) => v.id !== 'all').map((v) => (
-          <Nav key={v.id} to={`/tasks/${v.id}`} icon={<span style={{ width: 16 }} />} label={v.name}
-            count={v.id === 'overdue' ? overdue : counts[v.id]} red={v.id === 'overdue'} />
-        ))}
+        <div className="side-label">Team</div>
+        <Nav to="/team/list" icon={<IconUsers />} label="Team tasks" count={tasks.filter((x) => x.status !== 'Done').length} />
+        <Nav to="/team/calendar" icon={<IconCalendar />} label="Team calendar" />
+        <Nav to="/team/board" icon={<IconBoard />} label="Team board" />
+        <Nav to="/team/workload" icon={<IconGrid />} label="Workload" />
+        <Nav to="/tasks/assign" icon={<IconFlag />} label="To assign" count={counts.assign} />
+        <Nav to="/tasks/all" icon={<IconList />} label="All tasks" />
 
         <div className="side-foot">
-          <Nav to="/team" icon={<IconUsers />} label="Team" count={db.profiles.length} />
+          <Nav to="/people" icon={<IconUsers />} label="People" count={db.profiles.length} />
           <Nav to="/settings" icon={<IconSettings />} label="Settings" />
           <div className="nav" style={{ cursor: 'default' }}>
             <Avatar person={me ?? undefined} />

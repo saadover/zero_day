@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { firstName, formatBytes } from '../components/Atoms';
 import { IconArrowRight, IconChevronLeft, IconDownload, IconLink, IconPaperclip, IconPlus, IconTrash, IconX, StatusIcon } from '../components/Icons';
@@ -12,7 +12,7 @@ import { useData } from '../store/data';
 import { useOpenTask } from '../store/ui';
 
 export function MeetingsPage() {
-  const { db, insert, personById } = useData();
+  const { db, personById } = useData();
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const list = [...db.meetings]
@@ -21,11 +21,7 @@ export function MeetingsPage() {
   const upcoming = list.filter((m) => m.starts_at.slice(0, 10) >= today()).reverse();
   const past = list.filter((m) => m.starts_at.slice(0, 10) < today());
 
-  const create = async () => {
-    const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
-    const [m] = await insert('meetings', { title: 'New meeting', starts_at: d.toISOString() });
-    nav(`/meetings/${m.id}`);
-  };
+  const create = () => nav('/meetings/new');
 
   const Item = ({ m }: { m: Meeting }) => (
     <Link to={`/meetings/${m.id}`} className="trow" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -58,110 +54,176 @@ export function MeetingsPage() {
   );
 }
 
-function Field({ value, onSave, placeholder, rows = 4, label }: { value: string; onSave: (v: string) => void; placeholder: string; rows?: number; label: string }) {
-  const [v, setV] = useState(value);
-  const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setV(value); }, [value]);
-  return (
-    <textarea className="textarea" rows={rows} value={v} placeholder={placeholder} aria-label={label}
-      onFocus={() => { focused.current = true; }}
-      onChange={(e) => setV(e.target.value)} onBlur={() => { focused.current = false; if (v !== value) onSave(v); }} />
-  );
+interface DraftAction { key: string; id?: string; text: string; task_id: string | null }
+interface MeetingDraft {
+  title: string; starts: string; attendees: string; agenda: string; notes: string; decisions: string;
+  actions: DraftAction[]; links: string[]; newFiles: File[]; removedFiles: string[];
 }
+
+const toLocal = (iso: string) => {
+  const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 export function MeetingPage() {
   const { id } = useParams();
+  const isNew = id === 'new';
   const { db, tasks, update, insert, remove, meId, personById } = useData();
   const act = useActions();
   const toast = useToast();
   const nav = useNavigate();
   const { open } = useOpenTask();
   const linkM = useAnchor();
-  const [newAction, setNewAction] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const m = db.meetings.find((x) => x.id === id);
+  const [newAction, setNewAction] = useState('');
+  const [busy, setBusy] = useState(false);
+  const m = isNew ? undefined : db.meetings.find((x) => x.id === id);
 
-  if (!m) return <div className="page"><div className="empty">Meeting not found. <Link to="/meetings">Back to meetings</Link></div></div>;
+  const saved = useMemo<MeetingDraft>(() => {
+    if (!m) {
+      const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
+      return { title: '', starts: toLocal(d.toISOString()), attendees: '', agenda: '', notes: '', decisions: '', actions: [], links: [], newFiles: [], removedFiles: [] };
+    }
+    return {
+      title: m.title, starts: toLocal(m.starts_at), attendees: m.attendees, agenda: m.agenda, notes: m.notes, decisions: m.decisions,
+      actions: db.meeting_actions.filter((a) => a.meeting_id === m.id).sort((a, b) => a.position - b.position)
+        .map((a) => ({ key: a.id, id: a.id, text: a.text, task_id: a.task_id })),
+      links: db.meeting_tasks.filter((x) => x.meeting_id === m.id).map((x) => x.task_id).sort(),
+      newFiles: [], removedFiles: [],
+    };
+  }, [m, db.meeting_actions, db.meeting_tasks]);
+  const [draft, setDraft] = useState<MeetingDraft | null>(null);
+  const d = draft ?? saved;
+  const dirty = isNew || (draft !== null && JSON.stringify({ ...draft, links: [...draft.links].sort(), newFiles: draft.newFiles.map((f) => f.name) })
+    !== JSON.stringify({ ...saved, newFiles: [] }));
+  const edit = (patch: Partial<MeetingDraft> | ((x: MeetingDraft) => MeetingDraft)) =>
+    setDraft((cur) => (typeof patch === 'function' ? patch(cur ?? saved) : { ...(cur ?? saved), ...patch }));
 
-  const save = (patch: Partial<Meeting>) => update('meetings', { id: m.id }, { ...patch, updated_at: new Date().toISOString() });
-  const actions = db.meeting_actions.filter((a) => a.meeting_id === m.id).sort((a, b) => a.position - b.position);
-  const linkedIds = db.meeting_tasks.filter((x) => x.meeting_id === m.id).map((x) => x.task_id);
-  const linked = tasks.filter((t) => linkedIds.includes(t.id));
-  const files = db.attachments.filter((a) => a.meeting_id === m.id);
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => { if (dirty && draft) e.preventDefault(); };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty, draft]);
 
-  const addAction = async () => {
-    const text = newAction.trim();
-    if (!text) return;
-    setNewAction('');
-    await insert('meeting_actions', { meeting_id: m.id, text, position: Date.now() });
+  if (!isNew && !m) return <div className="page"><div className="empty">Meeting not found. <Link to="/meetings">Back to meetings</Link></div></div>;
+
+  const files = m ? db.attachments.filter((a) => a.meeting_id === m.id && !d.removedFiles.includes(a.id)) : [];
+
+  /** Write the draft to the database. Returns the meeting id. */
+  const save = async (): Promise<string | null> => {
+    if (!d.title.trim()) { toast.error('Give the meeting a title.'); return null; }
+    setBusy(true);
+    try {
+      const fields = { title: d.title.trim(), starts_at: new Date(d.starts).toISOString(), attendees: d.attendees, agenda: d.agenda, notes: d.notes, decisions: d.decisions };
+      let mid = m?.id;
+      if (!mid) { const [row] = await insert('meetings', fields); mid = row.id; }
+      else await update('meetings', { id: mid }, { ...fields, updated_at: new Date().toISOString() });
+
+      const keep = new Set(d.actions.map((a) => a.id).filter(Boolean));
+      for (const a of saved.actions) if (a.id && !keep.has(a.id)) await remove('meeting_actions', { id: a.id });
+      for (const [i, a] of d.actions.entries()) {
+        if (!a.text.trim()) continue;
+        if (!a.id) await insert('meeting_actions', { meeting_id: mid, text: a.text.trim(), position: i, task_id: a.task_id });
+        else {
+          const o = saved.actions.find((x) => x.id === a.id);
+          if (o && (o.text !== a.text || saved.actions.indexOf(o) !== i)) await update('meeting_actions', { id: a.id }, { text: a.text.trim(), position: i });
+        }
+      }
+      const add = d.links.filter((t) => !saved.links.includes(t));
+      const del = saved.links.filter((t) => !d.links.includes(t));
+      if (add.length) await insert('meeting_tasks', add.map((task_id) => ({ meeting_id: mid!, task_id })));
+      for (const t of del) await remove('meeting_tasks', { meeting_id: mid, task_id: t });
+      for (const f of d.newFiles) { try { await act.uploadPdf(f, { meeting_id: mid }); } catch (e) { toast.error(`${f.name}: ${(e as Error).message}`); } }
+      for (const fid of d.removedFiles) { const a = db.attachments.find((x) => x.id === fid); if (a) await act.deleteAttachment(a.id, a.path); }
+
+      setDraft(null);
+      toast.show('Meeting saved');
+      if (isNew) nav(`/meetings/${mid}`, { replace: true });
+      return mid;
+    } catch (e) {
+      toast.error((e as Error).message);
+      return null;
+    } finally { setBusy(false); }
   };
 
-  const makeTask = async (actionId: string, text: string) => {
-    const row = await act.createTask({ title: text, category: 'Meeting', given_by: 'Me' }, { assignees: [meId] });
-    await update('meeting_actions', { id: actionId }, { task_id: row.id });
-    await insert('meeting_tasks', { meeting_id: m.id, task_id: row.id });
+  const cancel = () => {
+    if (isNew) { nav('/meetings'); return; }
+    setDraft(null);
+  };
+
+  const makeTask = async (a: DraftAction) => {
+    if (!a.id || dirty) {
+      if (!confirm('Save the meeting first, then create the task?')) return;
+      const mid = await save();
+      if (!mid) return;
+      toast.show('Saved — click “Make task” again to create it.');
+      return;
+    }
+    const row = await act.createTask({ title: a.text, category: 'Meeting', given_by: 'Me' }, { assignees: [meId] });
+    await update('meeting_actions', { id: a.id }, { task_id: row.id });
+    await insert('meeting_tasks', { meeting_id: m!.id, task_id: row.id });
     toast.show(`Task #${row.number} created`, { label: 'Open', run: () => open(row.id) });
   };
 
-  const onFiles = async (e: ChangeEvent<HTMLInputElement>) => {
-    const list = [...(e.target.files ?? [])];
+  const onFiles = (e: ChangeEvent<HTMLInputElement>) => {
+    const list = [...(e.target.files ?? [])].filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     e.target.value = '';
-    for (const f of list) { try { await act.uploadPdf(f, { meeting_id: m.id }); } catch (err) { toast.error((err as Error).message); } }
+    if (list.length) edit((x) => ({ ...x, newFiles: [...x.newFiles, ...list] }));
   };
 
-  const localStart = (() => {
-    const d = new Date(m.starts_at); const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  })();
+  const linked = tasks.filter((t) => d.links.includes(t.id));
+  const addAction = () => {
+    const text = newAction.trim();
+    if (!text) return;
+    edit((x) => ({ ...x, actions: [...x.actions, { key: crypto.randomUUID(), text, task_id: null }] }));
+    setNewAction('');
+  };
 
   return (
     <div className="page" style={{ maxWidth: 860 }}>
       <div className="row-gap" style={{ marginBottom: 14 }}>
-        <Link to="/meetings" className="btn ghost sm"><IconChevronLeft size={14} /> Meetings</Link>
-        <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>Created by {firstName(personById.get(m.created_by ?? ''))} · edited {timeAgo(m.updated_at)}</span>
-        <button className="btn ghost sm danger" onClick={async () => {
-          if (!confirm('Delete this meeting and its notes?')) return;
-          if (files.length) await Promise.all(files.map((f) => act.deleteAttachment(f.id, f.path)));
-          await remove('meetings', { id: m.id }); nav('/meetings');
-        }}><IconTrash size={14} /> Delete</button>
+        <button className="btn ghost sm" onClick={() => { if (!(dirty && draft) || confirm('Leave without saving?')) nav('/meetings'); }}><IconChevronLeft size={14} /> Meetings</button>
+        {m && <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>Created by {firstName(personById.get(m.created_by ?? ''))} · edited {timeAgo(m.updated_at)}</span>}
+        {m && (
+          <button className="btn ghost sm danger" onClick={async () => {
+            if (!confirm('Delete this meeting and its notes?')) return;
+            const all = db.attachments.filter((a) => a.meeting_id === m.id);
+            if (all.length) await Promise.all(all.map((f) => act.deleteAttachment(f.id, f.path)));
+            await remove('meetings', { id: m.id }); nav('/meetings');
+          }}><IconTrash size={14} /> Delete</button>
+        )}
       </div>
 
-      <input className="panel-title" style={{ fontSize: 22, marginBottom: 6 }} defaultValue={m.title} key={m.title} aria-label="Meeting title"
-        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== m.title) save({ title: v }); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+      <input className="panel-title" style={{ fontSize: 22, marginBottom: 6 }} value={d.title} placeholder="Meeting title" aria-label="Meeting title"
+        autoFocus={isNew} onChange={(e) => edit({ title: e.target.value })} />
 
       <div className="props" style={{ marginBottom: 8 }}>
         <span className="k">Date</span>
-        <span className="v"><input type="datetime-local" className="date-input" value={localStart} aria-label="Date and time"
-          onChange={(e) => e.target.value && save({ starts_at: new Date(e.target.value).toISOString() })} /></span>
+        <span className="v"><input type="datetime-local" className="date-input" value={d.starts} aria-label="Date and time" onChange={(e) => e.target.value && edit({ starts: e.target.value })} /></span>
         <span className="k">Attendees</span>
-        <span className="v"><input className="input bare" defaultValue={m.attendees} key={m.attendees} placeholder="Who was there" style={{ height: 28 }}
-          onBlur={(e) => e.target.value !== m.attendees && save({ attendees: e.target.value })} /></span>
+        <span className="v"><input className="input bare" value={d.attendees} placeholder="Who was there" style={{ height: 28 }} onChange={(e) => edit({ attendees: e.target.value })} /></span>
       </div>
 
       <div className="doc">
         <h3>Agenda</h3>
-        <Field label="Agenda" value={m.agenda} onSave={(v) => save({ agenda: v })} placeholder="1. Topic…" rows={3} />
+        <textarea className="textarea" rows={3} value={d.agenda} placeholder="1. Topic…" onChange={(e) => edit({ agenda: e.target.value })} aria-label="Agenda" />
         <h3>Notes</h3>
-        <Field label="Notes" value={m.notes} onSave={(v) => save({ notes: v })} placeholder="What was discussed" rows={8} />
+        <textarea className="textarea" rows={8} value={d.notes} placeholder="What was discussed" onChange={(e) => edit({ notes: e.target.value })} aria-label="Notes" />
         <h3>Decisions</h3>
-        <Field label="Decisions" value={m.decisions} onSave={(v) => save({ decisions: v })} placeholder="What was decided" rows={3} />
+        <textarea className="textarea" rows={3} value={d.decisions} placeholder="What was decided" onChange={(e) => edit({ decisions: e.target.value })} aria-label="Decisions" />
 
         <h3>Action items</h3>
         <div>
-          {actions.map((a) => {
+          {d.actions.map((a) => {
             const t = a.task_id ? tasks.find((x) => x.id === a.task_id) : undefined;
             return (
-              <div className="action" key={a.id}>
+              <div className="action" key={a.key}>
                 {t ? <StatusIcon status={t.status} /> : <span className="dot" style={{ background: 'var(--icon)', margin: '0 3px' }} />}
-                <input className="input bare grow" defaultValue={a.text} aria-label="Action item" style={{ height: 30 }}
-                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== a.text) update('meeting_actions', { id: a.id }, { text: v }); }} />
-                {t ? (
-                  <button className="btn ghost sm" onClick={() => open(t.id)}>#{t.number} · {t.status}</button>
-                ) : (
-                  <button className="btn sm" onClick={() => makeTask(a.id, a.text)}><IconArrowRight size={13} /> Make task</button>
-                )}
-                <button className="btn ghost sm icon" aria-label="Remove" onClick={() => remove('meeting_actions', { id: a.id })}><IconX size={13} /></button>
+                <input className="input bare grow" value={a.text} aria-label="Action item" style={{ height: 30 }}
+                  onChange={(e) => edit((x) => ({ ...x, actions: x.actions.map((y) => (y.key === a.key ? { ...y, text: e.target.value } : y)) }))} />
+                {t ? <button className="btn ghost sm" onClick={() => open(t.id)}>#{t.number} · {t.status}</button>
+                  : <button className="btn sm" onClick={() => makeTask(a)}><IconArrowRight size={13} /> Make task</button>}
+                <button className="btn ghost sm icon" aria-label="Remove" onClick={() => edit((x) => ({ ...x, actions: x.actions.filter((y) => y.key !== a.key) }))}><IconX size={13} /></button>
               </div>
             );
           })}
@@ -178,7 +240,7 @@ export function MeetingPage() {
         <div className="list flat">
           {linked.map((t) => (
             <TaskRow key={t.id} task={t} right={
-              <button className="btn ghost sm icon" aria-label="Unlink" onClick={(e) => { e.stopPropagation(); remove('meeting_tasks', { meeting_id: m.id, task_id: t.id }); }}><IconX size={13} /></button>
+              <button className="btn ghost sm icon" aria-label="Unlink" onClick={(e) => { e.stopPropagation(); edit((x) => ({ ...x, links: x.links.filter((l) => l !== t.id) })); }}><IconX size={13} /></button>
             } />
           ))}
           {linked.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: '6px 0' }}>No linked tasks.</div>}
@@ -195,17 +257,30 @@ export function MeetingPage() {
               <span className="ellipsis">{a.name}</span><span className="muted" style={{ fontSize: 11.5 }}>{formatBytes(a.size)}</span>
             </button>
             <button className="btn ghost icon sm" aria-label="Download" onClick={() => act.openAttachment(a.path, true)}><IconDownload size={14} /></button>
-            <button className="btn ghost icon sm" aria-label="Delete file" onClick={() => { if (confirm(`Delete ${a.name}?`)) act.deleteAttachment(a.id, a.path); }}><IconTrash size={14} /></button>
+            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, a.id] }))}><IconTrash size={14} /></button>
+          </div>
+        ))}
+        {d.newFiles.map((f, i) => (
+          <div className="file" key={`${f.name}-${i}`} style={{ borderStyle: 'dashed' }}>
+            <span className="fi">PDF</span>
+            <span className="grow ellipsis">{f.name} <span className="muted" style={{ fontSize: 11.5 }}>· {formatBytes(f.size)} · uploads when you save</span></span>
+            <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}><IconX size={14} /></button>
           </div>
         ))}
       </div>
 
+      <div className="save-bar">
+        <span className="muted" style={{ fontSize: 12.5 }}>{isNew ? 'New meeting — not saved yet' : dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button className="btn" disabled={!dirty || busy} onClick={cancel}>Cancel</button>
+          <button className="btn primary" disabled={!dirty || busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save'}</button>
+        </span>
+      </div>
+
       {linkM.anchor && (
-        <SelectMenu anchor={linkM.anchor} onClose={linkM.close} search multi value={linkedIds}
-          options={tasks.filter((t) => t.status !== 'Done' || linkedIds.includes(t.id)).map((t) => ({ value: t.id, label: `#${t.number} ${t.title}` }))}
-          onPick={(tid) => linkedIds.includes(tid)
-            ? remove('meeting_tasks', { meeting_id: m.id, task_id: tid })
-            : insert('meeting_tasks', { meeting_id: m.id, task_id: tid })} />
+        <SelectMenu anchor={linkM.anchor} onClose={linkM.close} search multi value={d.links}
+          options={tasks.filter((t) => t.status !== 'Done' || d.links.includes(t.id)).map((t) => ({ value: t.id, label: `#${t.number} ${t.title}` }))}
+          onPick={(tid) => edit((x) => ({ ...x, links: x.links.includes(tid) ? x.links.filter((l) => l !== tid) : [...x.links, tid] }))} />
       )}
     </div>
   );

@@ -1,8 +1,8 @@
-import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
-import { addDays, addMonths, dueLabel, fmtMonth, startOfMonth, startOfWeek, today } from '../lib/dates';
+import { useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { addDays, addMonths, dueLabel, fmtDay, fmtMonth, hhmm, startOfMonth, startOfWeek, today } from '../lib/dates';
 import type { DateField, GroupKey } from '../lib/tasks';
-import { PRIORITY_RANK, quadrant, STATUS_RANK } from '../lib/tasks';
-import type { Status, Task } from '../lib/types';
+import { PRIORITY_RANK, quadrant, STATUS_RANK, TIME_FIELD } from '../lib/tasks';
+import type { Profile, Status, Task } from '../lib/types';
 import { CATEGORIES, PRIORITIES, STATUSES } from '../lib/types';
 import { useActions } from '../store/actions';
 import { useData } from '../store/data';
@@ -10,6 +10,7 @@ import { useOpenTask, useUi, type QuickAddDefaults } from '../store/ui';
 import { Avatar, Avatars, firstName, TagChip } from './Atoms';
 import { IconChevronLeft, IconChevronRight, IconPlus, PriorityIcon, StatusIcon } from './Icons';
 import { TaskRow } from './TaskRow';
+import { useToast } from './Toast';
 
 // ───────────────────────────── List ─────────────────────────────
 
@@ -93,7 +94,7 @@ const dragProps = (id: string) => ({
 export function TaskCard({ task }: { task: Task }) {
   const { personById, db } = useData();
   const { open } = useOpenTask();
-  const d = dueLabel(task.deadline, task.status === 'Done');
+  const d = dueLabel(task.deadline, task.status === 'Done', task.deadline_time);
   const subsDone = task.subtasks.filter((s) => s.done).length;
   return (
     <article className="card" {...dragProps(task.id)} onClick={() => open(task.id)} tabIndex={0}
@@ -118,8 +119,16 @@ export function TaskCard({ task }: { task: Task }) {
 
 function BoardColumn({ status, tasks }: { status: Status; tasks: Task[] }) {
   const { updateTask } = useActions();
+  const { taskById } = useData();
+  const toast = useToast();
   const { openQuickAdd } = useUi();
-  const drop = useDrop((id) => updateTask(id, { status }));
+  const drop = useDrop((id) => {
+    const t = taskById.get(id);
+    if (!t || t.status === status) return;
+    const before = t.status;
+    updateTask(id, { status });
+    toast.show(`#${t.number} → ${status}`, { label: 'Undo', run: () => updateTask(id, { status: before }) });
+  });
   return (
     <section className={`col ${drop.over ? 'over' : ''}`} {...drop.props} aria-label={status}>
       <div className="col-h"><StatusIcon status={status} />{status}<span className="n">{tasks.length}</span></div>
@@ -145,53 +154,150 @@ export function BoardView({ tasks, doneLimit = 15 }: { tasks: Task[]; doneLimit?
 
 // ───────────────────────────── Calendar ─────────────────────────────
 
-function CalCell({ day, month, tasks, field }: { day: string; month: string; tasks: Task[]; field: DateField }) {
-  const { updateTask } = useActions();
+export type ColorBy = 'priority' | 'person';
+
+function chipStyle(t: Task, colorBy: ColorBy, personById: Map<string, Profile>): CSSProperties | undefined {
+  if (colorBy !== 'person') return undefined;
+  const c = personById.get(t.assignees[0] ?? '')?.color ?? '#8E8E89';
+  return { borderLeftColor: c, background: `color-mix(in srgb, ${c} 14%, var(--surface))` };
+}
+
+function Chip({ t, field, colorBy }: { t: Task; field: DateField; colorBy: ColorBy }) {
   const { open } = useOpenTask();
+  const { personById } = useData();
+  const tm = hhmm(t[TIME_FIELD[field]]);
+  const who = t.assignees.map((id) => firstName(personById.get(id))).join(', ');
+  return (
+    <div className={`chip ${colorBy === 'priority' ? t.priority : ''} ${t.status === 'Done' ? 'done' : ''}`} style={chipStyle(t, colorBy, personById)}
+      {...dragProps(t.id)} onClick={() => open(t.id)} title={`${t.title}${who ? ` — ${who}` : ''}`}>
+      {tm && <span className="mono" style={{ fontSize: 10.5, marginRight: 4, opacity: 0.8 }}>{tm}</span>}
+      {colorBy === 'person' && t.assignees.length > 1 && <span className="mono" style={{ fontSize: 10.5, marginRight: 4 }}>+{t.assignees.length - 1}</span>}
+      {t.title}
+    </div>
+  );
+}
+
+const byTime = (field: DateField) => (a: Task, b: Task) =>
+  (STATUS_RANK[a.status] === 3 ? 1 : 0) - (STATUS_RANK[b.status] === 3 ? 1 : 0)
+  || (a[TIME_FIELD[field]] ?? '99').localeCompare(b[TIME_FIELD[field]] ?? '99')
+  || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+
+function useDayDrop(day: string, field: DateField) {
+  const { updateTask } = useActions();
+  const toast = useToast();
+  const { taskById } = useData();
+  return useDrop((id) => {
+    const t = taskById.get(id);
+    if (!t || t[field] === day) return;
+    const before = t[field];
+    updateTask(id, { [field]: day });
+    toast.show(`#${t.number} moved to ${fmtDay(day)}`, { label: 'Undo', run: () => updateTask(id, { [field]: before }) });
+  });
+}
+
+function CalCell({ day, month, tasks, field, colorBy }: { day: string; month: string; tasks: Task[]; field: DateField; colorBy: ColorBy }) {
   const { openQuickAdd } = useUi();
-  const drop = useDrop((id) => updateTask(id, { [field]: day }));
+  const drop = useDayDrop(day, field);
   const out = day.slice(0, 7) !== month.slice(0, 7);
-  const sorted = [...tasks].sort((a, b) => (STATUS_RANK[a.status] === 3 ? 1 : 0) - (STATUS_RANK[b.status] === 3 ? 1 : 0) || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  const sorted = [...tasks].sort(byTime(field));
   return (
     <div className={`cell ${out ? 'out' : ''} ${day === today() ? 'today' : ''} ${drop.over ? 'over' : ''}`} {...drop.props}
       onDoubleClick={(e) => { if (e.target === e.currentTarget) openQuickAdd({ [field]: day }); }}>
       <div className="dn"><b>{Number(day.slice(8))}</b></div>
-      {sorted.slice(0, 5).map((t) => (
-        <div key={t.id} className={`chip ${t.priority} ${t.status === 'Done' ? 'done' : ''}`} {...dragProps(t.id)}
-          onClick={() => open(t.id)} title={t.title}>{t.title}</div>
-      ))}
+      {sorted.slice(0, 5).map((t) => <Chip key={t.id} t={t} field={field} colorBy={colorBy} />)}
       {sorted.length > 5 && <span className="muted" style={{ fontSize: 11.5, padding: '0 4px' }}>+{sorted.length - 5} more</span>}
     </div>
   );
 }
 
-export function CalendarView({ tasks, field }: { tasks: Task[]; field: DateField }) {
-  const [month, setMonth] = useState(startOfMonth(today()));
+function WeekCol({ day, tasks, field, colorBy }: { day: string; tasks: Task[]; field: DateField; colorBy: ColorBy }) {
+  const { openQuickAdd } = useUi();
+  const drop = useDayDrop(day, field);
+  return (
+    <div className={`wcol ${day === today() ? 'today' : ''} ${drop.over ? 'over' : ''}`} {...drop.props}>
+      <div className="wh"><span>{fmtDay(day).split(' ')[0]}</span><b>{Number(day.slice(8))}</b></div>
+      {[...tasks].sort(byTime(field)).map((t) => <Chip key={t.id} t={t} field={field} colorBy={colorBy} />)}
+      <button className="add-row" style={{ height: 30, padding: '0 6px', fontSize: 12 }} onClick={() => openQuickAdd({ [field]: day })}><IconPlus size={12} /> Add</button>
+    </div>
+  );
+}
+
+export function CalendarView({ tasks, field, colorBy = 'priority', setColorBy }: {
+  tasks: Task[]; field: DateField; colorBy?: ColorBy; setColorBy?: (c: ColorBy) => void;
+}) {
+  const { people } = useData();
+  const [mode, setMode] = useState<'month' | 'week'>(() => (sessionStorage.getItem('cal-mode') as 'month' | 'week') || 'month');
+  const [anchor, setAnchor] = useState(today());
+  const [hidden, setHidden] = useState<string[]>([]);
+  const setM = (m: 'month' | 'week') => { setMode(m); try { sessionStorage.setItem('cal-mode', m); } catch { /* ignore */ } };
+
+  const month = startOfMonth(anchor);
+  const weekStart = startOfWeek(anchor);
+  const shownTasks = colorBy === 'person' && hidden.length
+    ? tasks.filter((t) => !(t.assignees.length ? t.assignees : ['—']).every((a) => hidden.includes(a)))
+    : tasks;
+  const byDay = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const t of shownTasks) { const d = t[field]; if (d) { if (!m.has(d)) m.set(d, []); m.get(d)!.push(t); } }
+    return m;
+  }, [shownTasks, field]);
+
   const start = startOfWeek(month);
   const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const lastNeeded = days.findIndex((d, i) => i % 7 === 0 && d.slice(0, 7) > month.slice(0, 7));
-  const shown = lastNeeded > 0 ? days.slice(0, lastNeeded) : days;
-  const byDay = useMemo(() => {
-    const m = new Map<string, Task[]>();
-    for (const t of tasks) { const d = t[field]; if (d) { if (!m.has(d)) m.set(d, []); m.get(d)!.push(t); } }
-    return m;
-  }, [tasks, field]);
+  const monthDays = lastNeeded > 0 ? days.slice(0, lastNeeded) : days;
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  const step = (dir: -1 | 1) => setAnchor(mode === 'month' ? addMonths(month, dir) : addDays(weekStart, dir * 7));
+  const title = mode === 'month' ? fmtMonth(month) : `${fmtDay(weekDays[0])} – ${fmtDay(weekDays[6])}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="row-gap">
-        <button className="btn sm icon" aria-label="Previous month" onClick={() => setMonth(addMonths(month, -1))}><IconChevronLeft /></button>
-        <button className="btn sm" onClick={() => setMonth(startOfMonth(today()))}>Today</button>
-        <button className="btn sm icon" aria-label="Next month" onClick={() => setMonth(addMonths(month, 1))}><IconChevronRight /></button>
-        <strong style={{ fontSize: 15, fontWeight: 600 }}>{fmtMonth(month)}</strong>
-        <span className="muted" style={{ fontSize: 12.5, marginLeft: 'auto' }}>Drag a task to another day · double-click a day to add</span>
+        <button className="btn sm icon" aria-label="Previous" onClick={() => step(-1)}><IconChevronLeft /></button>
+        <button className="btn sm" onClick={() => setAnchor(today())}>Today</button>
+        <button className="btn sm icon" aria-label="Next" onClick={() => step(1)}><IconChevronRight /></button>
+        <strong style={{ fontSize: 15, fontWeight: 600 }}>{title}</strong>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {setColorBy && (
+            <div className="seg" aria-label="Colour by">
+              <button className={colorBy === 'priority' ? 'on' : ''} onClick={() => setColorBy('priority')}>By priority</button>
+              <button className={colorBy === 'person' ? 'on' : ''} onClick={() => setColorBy('person')}>By person</button>
+            </div>
+          )}
+          <div className="seg" aria-label="Calendar range">
+            <button className={mode === 'month' ? 'on' : ''} onClick={() => setM('month')}>Month</button>
+            <button className={mode === 'week' ? 'on' : ''} onClick={() => setM('week')}>Week</button>
+          </div>
+        </span>
       </div>
-      <div className="scroll-x">
-        <div className="cal" style={{ minWidth: 640 }}>
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} className="dow">{d}</div>)}
-          {shown.map((d) => <CalCell key={d} day={d} month={month} tasks={byDay.get(d) ?? []} field={field} />)}
+      {colorBy === 'person' && (
+        <div className="legend">
+          {people.map((p) => {
+            const off = hidden.includes(p.id);
+            return (
+              <button key={p.id} className={`legend-item ${off ? 'off' : ''}`} onClick={() => setHidden(off ? hidden.filter((x) => x !== p.id) : [...hidden, p.id])}
+                aria-pressed={!off} title={off ? 'Show' : 'Hide'}>
+                <span className="dot" style={{ background: p.color, width: 10, height: 10 }} />{p.full_name || p.email}
+              </button>
+            );
+          })}
+          <span className="muted" style={{ fontSize: 12 }}>Click a name to hide or show their tasks</span>
         </div>
+      )}
+      <div className="scroll-x">
+        {mode === 'month' ? (
+          <div className="cal" style={{ minWidth: 640 }}>
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} className="dow">{d}</div>)}
+            {monthDays.map((d) => <CalCell key={d} day={d} month={month} tasks={byDay.get(d) ?? []} field={field} colorBy={colorBy} />)}
+          </div>
+        ) : (
+          <div className="week" style={{ minWidth: 760 }}>
+            {weekDays.map((d) => <WeekCol key={d} day={d} tasks={byDay.get(d) ?? []} field={field} colorBy={colorBy} />)}
+          </div>
+        )}
       </div>
+      <span className="muted" style={{ fontSize: 12 }}>Drag a task to another day to move it · double-click a day to add</span>
     </div>
   );
 }

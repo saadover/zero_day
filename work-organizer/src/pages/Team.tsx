@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Avatar, formatBytes, TagChip } from '../components/Atoms';
+import { Avatar, formatBytes } from '../components/Atoms';
 import { IconCopy, IconDownload, IconPlus, IconTrash } from '../components/Icons';
 import { useToast } from '../components/Toast';
 import { timeAgo } from '../lib/dates';
@@ -68,32 +68,67 @@ function AddMember() {
   );
 }
 
+interface TagRow { key: string; id?: string; name: string; color: TagColor }
+
 function Tags() {
   const { db, update, remove, insert } = useData();
+  const toast = useToast();
+  const saved: TagRow[] = db.tags.map((t) => ({ key: t.id, id: t.id, name: t.name, color: t.color }));
+  const [rows, setRows] = useState<TagRow[] | null>(null);
   const [name, setName] = useState('');
-  const counts = (id: string) => db.task_tags.filter((t) => t.tag_id === id).length;
+  const [busy, setBusy] = useState(false);
+  const r = rows ?? saved;
+  const dirty = rows !== null && JSON.stringify(rows.map((x) => [x.id, x.name, x.color])) !== JSON.stringify(saved.map((x) => [x.id, x.name, x.color]));
+  const counts = (id?: string) => (id ? db.task_tags.filter((t) => t.tag_id === id).length : 0);
+  const setRow = (key: string, patch: Partial<TagRow>) => setRows(r.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const keep = new Set(r.map((x) => x.id).filter(Boolean));
+      for (const t of saved) if (t.id && !keep.has(t.id)) await remove('tags', { id: t.id });
+      for (const t of r) {
+        const n = t.name.trim().toLowerCase();
+        if (!n) continue;
+        if (!t.id) await insert('tags', { name: n, color: t.color });
+        else {
+          const o = saved.find((x) => x.id === t.id);
+          if (o && (o.name !== n || o.color !== t.color)) await update('tags', { id: t.id }, { name: n, color: t.color });
+        }
+      }
+      setRows(null);
+      toast.show('Tags saved');
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  };
+
   return (
     <div className="card-box">
       <h2>Tags</h2>
-      <p className="muted" style={{ fontSize: 12.5 }}>Shared by the whole team. Click a colour to change it.</p>
+      <p className="muted" style={{ fontSize: 12.5 }}>Shared by the whole team. Rename, recolour or remove, then Save.</p>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {db.tags.map((t) => (
-          <div className="chk" key={t.id}>
-            <TagChip tag={t} />
-            <span className="muted mono" style={{ fontSize: 11.5 }}>{counts(t.id)} {counts(t.id) === 1 ? 'task' : 'tasks'}</span>
+        {r.map((t) => (
+          <div className="chk" key={t.key}>
+            <span className="dot" style={{ background: `var(--tag-${t.color})`, width: 10, height: 10 }} />
+            <input className="input bare" style={{ height: 28, maxWidth: 140 }} value={t.name} aria-label="Tag name" onChange={(e) => setRow(t.key, { name: e.target.value })} />
+            <span className="muted mono" style={{ fontSize: 11.5 }}>{counts(t.id)}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
               {TAG_COLORS.map((c) => (
-                <button key={c} aria-label={`Colour ${c}`} onClick={() => update('tags', { id: t.id }, { color: c as TagColor })}
+                <button key={c} aria-label={`Colour ${c}`} onClick={() => setRow(t.key, { color: c as TagColor })}
                   style={{ width: 16, height: 16, borderRadius: 4, border: t.color === c ? '2px solid var(--text)' : '1px solid var(--line-strong)', background: `var(--tag-${c})`, cursor: 'pointer', padding: 0 }} />
               ))}
             </span>
-            <button className="btn ghost sm icon" aria-label={`Delete tag ${t.name}`} onClick={() => { if (confirm(`Delete tag "${t.name}"? It's removed from all tasks.`)) remove('tags', { id: t.id }); }}><IconTrash size={13} /></button>
+            <button className="btn ghost sm icon" aria-label={`Remove tag ${t.name}`} onClick={() => setRows(r.filter((x) => x.key !== t.key))}><IconTrash size={13} /></button>
           </div>
         ))}
       </div>
       <div className="row-gap">
-        <input className="input grow" placeholder="New tag" value={name} onChange={(e) => setName(e.target.value)}
-          onKeyDown={async (e) => { if (e.key === 'Enter' && name.trim()) { await insert('tags', { name: name.trim().toLowerCase(), color: TAG_COLORS[db.tags.length % TAG_COLORS.length] }); setName(''); } }} />
+        <input className="input grow" placeholder="New tag + Enter" value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { setRows([...r, { key: crypto.randomUUID(), name: name.trim().toLowerCase(), color: TAG_COLORS[r.length % TAG_COLORS.length] as TagColor }]); setName(''); } }} />
+      </div>
+      <div className="row-gap" style={{ justifyContent: 'flex-end' }}>
+        {dirty && <span className="muted" style={{ fontSize: 12.5, marginRight: 'auto' }}>Unsaved changes{r.length < saved.length ? ' — removed tags disappear from their tasks' : ''}</span>}
+        <button className="btn" disabled={!dirty || busy} onClick={() => setRows(null)}>Cancel</button>
+        <button className="btn primary" disabled={!dirty || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
@@ -158,7 +193,7 @@ export function TeamPage() {
   return (
     <div className="page" style={{ maxWidth: 920 }}>
       <div className="page-head">
-        <h1>Team</h1>
+        <h1>People</h1>
         <span className="sub">{people.length} {people.length === 1 ? 'person' : 'people'} · everyone has the same rights</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

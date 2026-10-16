@@ -44,7 +44,7 @@ export default async function handlerFn(req, res) {
     const url = appUrl(req);
     const [{ data: profiles }, { data: tasks }, { data: assignees }, { data: subs }, { data: pending }] = await Promise.all([
       db.from('profiles').select('*'),
-      db.from('tasks').select('id, number, title, status, priority, do_date, deadline, follow_up_date, follow_up_with, remind_at, given_by, created_by').neq('status', 'Done'),
+      db.from('tasks').select('id, number, title, status, priority, do_date, do_time, deadline, deadline_time, follow_up_date, follow_up_time, follow_up_with, remind_at, given_by, created_by').neq('status', 'Done'),
       db.from('task_assignees').select('task_id, user_id'),
       db.from('push_subscriptions').select('*'),
       db.from('notifications').select('*').is('sent_at', null),
@@ -87,17 +87,45 @@ export default async function handlerFn(req, res) {
       // Assignments and other queued notifications for this person.
       const queued = (pending ?? []).filter((n) => n.user_id === p.id);
 
+      const at = (t) => (hm(t.deadline_time) ? ` at ${hm(t.deadline_time)}` : '');
+      const overdueNow = (t) => t.deadline && (t.deadline < now.date || (t.deadline === now.date && hm(t.deadline_time) && hm(t.deadline_time) <= now.time));
+
+      if (!quiet) {
+        for (const t of mine) {
+          // About an hour before a timed deadline — not tied to the morning summary time.
+          if (p.remind_due_soon !== false && t.deadline === now.date && hm(t.deadline_time)) {
+            const left = mins(hm(t.deadline_time)) - mins(now.time);
+            const key = `soon:${t.id}:${t.deadline}:${hm(t.deadline_time)}`;
+            if (left > 0 && left <= 75 && !has(key)) {
+              alerts.push({ key, title: `Due in ${left} min: ${t.title}`, body: `Deadline today${at(t)}`, url: taskUrl(t), section: 'Due soon' });
+              // Already warned — no separate "due today" for the same task.
+              const todayKey = `today:${t.id}:${t.deadline}`;
+              logged.add(`${p.id}|${todayKey}`);
+              newLog.push({ user_id: p.id, key: todayKey });
+            }
+          }
+          if (p.remind_followups && t.follow_up_date === now.date && hm(t.follow_up_time) && hm(t.follow_up_time) <= now.time) {
+            const key = `follow:${t.id}:${t.follow_up_date}`;
+            if (!has(key)) alerts.push({ key, title: `Follow up${t.follow_up_with ? ` with ${t.follow_up_with}` : ''} now`, body: t.title, url: taskUrl(t), section: 'Follow-ups' });
+          }
+        }
+      }
+
       if (!quiet && afterDigestTime) {
         for (const t of mine) {
-          if (p.remind_overdue && t.deadline && t.deadline < now.date && diffDays(t.deadline, now.date) <= 14) {
-            const key = `overdue:${t.id}:${t.deadline}`;
-            if (!has(key)) alerts.push({ key, title: `Overdue: ${t.title}`, body: `Was due ${fmtDay(t.deadline)}`, url: taskUrl(t), section: 'Overdue' });
+          if (p.remind_overdue && overdueNow(t) && diffDays(t.deadline, now.date) <= 14) {
+            const key = `overdue:${t.id}:${t.deadline}:${hm(t.deadline_time) || ''}`;
+            if (!has(key)) alerts.push({ key, title: `Overdue: ${t.title}`, body: `Was due ${t.deadline === now.date ? 'today' : fmtDay(t.deadline)}${at(t)}`, url: taskUrl(t), section: 'Overdue' });
+          }
+          if (p.remind_due_today !== false && t.deadline === now.date && !overdueNow(t)) {
+            const key = `today:${t.id}:${t.deadline}`;
+            if (!has(key)) alerts.push({ key, title: `Due today${at(t)}: ${t.title}`, body: t.priority === 'High' ? 'High priority' : '', url: taskUrl(t), section: 'Due today' });
           }
           if (p.remind_due_tomorrow && t.priority === 'High' && t.deadline === addDays(now.date, 1)) {
             const key = `tomorrow:${t.id}:${t.deadline}`;
-            if (!has(key)) alerts.push({ key, title: `Due tomorrow: ${t.title}`, body: 'High priority', url: taskUrl(t), section: 'Due tomorrow' });
+            if (!has(key)) alerts.push({ key, title: `Due tomorrow${at(t)}: ${t.title}`, body: 'High priority', url: taskUrl(t), section: 'Due tomorrow' });
           }
-          if (p.remind_followups && t.follow_up_date && t.follow_up_date <= now.date && diffDays(t.follow_up_date, now.date) <= 3) {
+          if (p.remind_followups && t.follow_up_date && !hm(t.follow_up_time) && t.follow_up_date <= now.date && diffDays(t.follow_up_date, now.date) <= 3) {
             const key = `follow:${t.id}:${t.follow_up_date}`;
             if (!has(key)) alerts.push({ key, title: `Follow up${t.follow_up_with ? ` with ${t.follow_up_with}` : ''}`, body: t.title, url: taskUrl(t), section: 'Follow-ups' });
           }
@@ -108,14 +136,14 @@ export default async function handlerFn(req, res) {
       let digest = null;
       const digestKey = `digest:${now.date}`;
       if (p.digest_enabled && !quiet && inDigestWindow && !has(digestKey)) {
-        const today = mine.filter((t) => t.do_date === now.date || t.deadline === now.date);
-        const overdue = mine.filter((t) => t.deadline && t.deadline < now.date);
+        const today = mine.filter((t) => (t.do_date === now.date || t.deadline === now.date) && !overdueNow(t));
+        const overdue = mine.filter((t) => overdueNow(t));
         const follow = mine.filter((t) => t.follow_up_date && t.follow_up_date <= now.date);
         const toAssign = (tasks ?? []).filter((t) => t.given_by === 'Manager' && !(byTask.get(t.id) ?? []).length);
         const item = (t, meta) => ({ text: t.title, meta, url: taskUrl(t) });
         const sections = [
           { title: 'Overdue', color: '#B4361E', items: overdue.map((t) => item(t, `Was due ${fmtDay(t.deadline)}`)) },
-          { title: 'Today', items: today.map((t) => item(t, t.priority === 'High' ? 'High priority' : '')) },
+          { title: 'Today', items: today.map((t) => item(t, [hm(t.deadline_time) && t.deadline === now.date ? `Due ${hm(t.deadline_time)}` : '', t.priority === 'High' ? 'High priority' : ''].filter(Boolean).join(' · '))) },
           { title: 'Follow-ups', items: follow.map((t) => item(t, t.follow_up_with ? `Chase ${t.follow_up_with}` : '')) },
           { title: 'Due tomorrow', items: mine.filter((t) => t.deadline === addDays(now.date, 1)).map((t) => item(t, t.priority)) },
           { title: 'New from manager, not assigned', items: toAssign.map((t) => item(t, t.deadline ? `Due ${fmtDay(t.deadline)}` : '')) },
@@ -125,7 +153,7 @@ export default async function handlerFn(req, res) {
         if (count > 0) {
           digest = { sections, overdue: overdue.length, today: today.length, follow: follow.length };
           // Everything in the summary counts as notified; no separate alert for the same thing.
-          for (const a of alerts) if (!a.always) a.inDigest = true;
+          for (const a of alerts) if (!a.always && !a.key.startsWith('soon:')) a.inDigest = true;
         }
       }
 

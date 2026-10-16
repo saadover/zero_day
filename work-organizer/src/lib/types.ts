@@ -23,6 +23,8 @@ export interface Profile {
   digest_enabled: boolean;
   digest_time: string;
   remind_due_tomorrow: boolean;
+  remind_due_today: boolean;
+  remind_due_soon: boolean;
   remind_overdue: boolean;
   remind_followups: boolean;
   remind_assigned: boolean;
@@ -49,8 +51,11 @@ export interface TaskRow {
   priority: Priority;
   category: Category | null;
   do_date: string | null;
+  do_time: string | null;
   deadline: string | null;
+  deadline_time: string | null;
   follow_up_date: string | null;
+  follow_up_time: string | null;
   follow_up_with: string | null;
   notes: string;
   remind_at: string | null;
@@ -119,6 +124,7 @@ export interface ChecklistItem {
   owner_id: string | null;
   position: number;
   active: boolean;
+  only_day: string | null;
 }
 
 export interface ChecklistCheck {

@@ -34,13 +34,15 @@ function QuickAddModal() {
       const row = await createTask({
         ...defFields,
         title: parsed.title,
-        ...(parsed.deadline ? { deadline: parsed.deadline } : {}),
-        ...(parsed.doDate ? { do_date: parsed.doDate } : {}),
+        ...(parsed.deadline ? { deadline: parsed.deadline, deadline_time: parsed.deadlineTime } : {}),
+        ...(parsed.doDate ? { do_date: parsed.doDate, do_time: parsed.doTime } : {}),
         ...(parsed.priority ? { priority: parsed.priority } : {}),
         ...(parsed.category ? { category: parsed.category } : {}),
         ...(parsed.manager ? { given_by: 'Manager' as const } : {}),
       }, {
-        assignees: parsed.assignees.length ? parsed.assignees : defAssignees ?? [],
+        // Nobody named → it's yours, unless it's a manager task waiting to be assigned.
+        assignees: parsed.assignees.length ? parsed.assignees
+          : defAssignees ?? (parsed.manager || defFields.given_by === 'Manager' ? [] : [meId]),
         tagNames: parsed.tagNames,
       });
       if (meetingId) await insert('meeting_tasks', { meeting_id: meetingId, task_id: row.id });
@@ -61,7 +63,7 @@ function QuickAddModal() {
     <div className="modal-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) closeQuickAdd(); }}>
       <div className="modal" role="dialog" aria-label="New task">
         <input
-          className="qa-input" autoFocus placeholder="Send budget to Karim fri !high #finance @lina"
+          className="qa-input" autoFocus placeholder="Send budget to Karim fri 3pm !high #finance @lina"
           value={text} onChange={(e) => setText(e.target.value)} aria-label="Task"
           onKeyDown={(e) => {
             if (e.key === 'Escape') closeQuickAdd();
@@ -69,14 +71,14 @@ function QuickAddModal() {
           }}
         />
         <div className="qa-chips">
-          {parsed.deadline && <span className="qa-chip"><IconCalendar size={12} /> Deadline {fmtDay(parsed.deadline)}</span>}
-          {parsed.doDate && <span className="qa-chip"><IconCalendar size={12} /> Do {fmtDay(parsed.doDate)}</span>}
+          {parsed.deadline && <span className="qa-chip"><IconCalendar size={12} /> Deadline {fmtDay(parsed.deadline)}{parsed.deadlineTime ? ` ${parsed.deadlineTime}` : ''}</span>}
+          {parsed.doDate && <span className="qa-chip"><IconCalendar size={12} /> Do {fmtDay(parsed.doDate)}{parsed.doTime ? ` ${parsed.doTime}` : ''}</span>}
           {parsed.priority && <span className="qa-chip"><PriorityIcon priority={parsed.priority} size={12} /> {parsed.priority}</span>}
           {parsed.category && <span className="qa-chip">{parsed.category}</span>}
           {parsed.manager && <span className="qa-chip"><IconFlag size={12} /> From manager</span>}
           {parsed.tagNames.map((t) => <span key={t} className="qa-chip">#{t}</span>)}
           {parsed.assignees.map((id) => <span key={id} className="qa-chip">@{firstName(personById.get(id))}</span>)}
-          {!text && <span className="muted" style={{ fontSize: 12 }}>Type naturally — dates, !priority, #tags, @people and +manager are picked up.</span>}
+          {!text && <span className="muted" style={{ fontSize: 12 }}>Type naturally — dates and times (fri 3pm), !priority, #tags, @people and +manager are picked up. Assigned to you unless you @someone.</span>}
         </div>
         <div className="qa-foot">
           <span><span className="kbd">↵</span> add</span>

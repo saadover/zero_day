@@ -1,17 +1,19 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { dueLabel } from '../lib/dates';
-import { isOverdue } from '../lib/tasks';
+import { isOverdue, TIME_FIELD } from '../lib/tasks';
 import type { Status, Task } from '../lib/types';
 import { STATUSES } from '../lib/types';
 import { useActions } from '../store/actions';
 import { useData } from '../store/data';
 import { useOpenTask } from '../store/ui';
 import { Avatars, TagChip } from './Atoms';
+import { useToast } from './Toast';
 import { PriorityIcon, StatusIcon } from './Icons';
 import { SelectMenu, useAnchor } from './Popover';
 
 export function StatusButton({ task }: { task: Task }) {
   const { updateTask } = useActions();
+  const toast = useToast();
   const menu = useAnchor();
   return (
     <>
@@ -25,7 +27,12 @@ export function StatusButton({ task }: { task: Task }) {
         <SelectMenu<Status>
           anchor={menu.anchor} onClose={menu.close} value={task.status}
           options={STATUSES.map((s) => ({ value: s, label: s, icon: <StatusIcon status={s} /> }))}
-          onPick={(s) => updateTask(task.id, { status: s })}
+          onPick={(s) => {
+            if (s === task.status) return;
+            const before = task.status;
+            updateTask(task.id, { status: s });
+            toast.show(`#${task.number} → ${s}`, { label: 'Undo', run: () => updateTask(task.id, { status: before }) });
+          }}
         />
       )}
     </>
@@ -37,7 +44,7 @@ export function TaskRow({ task, showCategory = true, dateField = 'deadline', rig
 }) {
   const { personById, db } = useData();
   const { openId, open } = useOpenTask();
-  const d = dueLabel(task[dateField], task.status === 'Done');
+  const d = dueLabel(task[dateField], task.status === 'Done', task[TIME_FIELD[dateField]]);
   const tagList = task.tags.map((id) => db.tags.find((t) => t.id === id)).filter(Boolean).slice(0, 2);
   const subsDone = task.subtasks.filter((s) => s.done).length;
 

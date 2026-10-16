@@ -1,4 +1,4 @@
-import { addDays, addMonths, diffDays, endOfMonth, startOfMonth, startOfWeek, today } from './dates';
+import { addDays, addMonths, diffDays, endOfMonth, isPast, startOfMonth, startOfWeek, today } from './dates';
 import type { Priority, Status, Task } from './types';
 
 export const PRIORITY_RANK: Record<Priority, number> = { High: 0, Medium: 1, Low: 2 };
@@ -16,7 +16,7 @@ export function urgencyScore(t: Omit<Task, 'urgency'>): number {
     if (!d) return 0;
     const n = diffDays(now, d);
     if (n < 0) return weight * (40 + Math.min(-n, 14) * 2);
-    if (n === 0) return weight * 32;
+    if (n === 0) return weight * (d === t.deadline && isPast(t.deadline, t.deadline_time) ? 40 : 32);
     if (n === 1) return weight * 22;
     if (n <= 3) return weight * 14;
     if (n <= 7) return weight * 7;
@@ -31,9 +31,11 @@ export function urgencyScore(t: Omit<Task, 'urgency'>): number {
   return Math.round(s);
 }
 
-export function isOverdue(t: Task): boolean {
-  return t.status !== 'Done' && !!t.deadline && t.deadline < today();
+export function isOverdue(t: Pick<Task, 'status' | 'deadline' | 'deadline_time'>): boolean {
+  return t.status !== 'Done' && isPast(t.deadline, t.deadline_time);
 }
+
+export const TIME_FIELD = { deadline: 'deadline_time', do_date: 'do_time', follow_up_date: 'follow_up_time' } as const;
 
 /** Eisenhower: urgent = due within 2 days or overdue; important = High priority. */
 export function quadrant(t: Task): 'do' | 'plan' | 'delegate' | 'drop' {
@@ -137,7 +139,7 @@ export function applyFilters(tasks: Task[], f: Filters, me: string): Task[] {
   });
 }
 
-const cmpDate = (a: string | null, b: string | null) => {
+const cmpDate = (a: string | null, b: string | null): number => {
   if (a === b) return 0;
   if (!a) return 1;
   if (!b) return -1;
@@ -150,9 +152,9 @@ export function sortTasks(tasks: Task[], key: SortKey): Task[] {
     switch (key) {
       case 'urgency': return b.urgency - a.urgency || cmpDate(a.deadline, b.deadline);
       case 'priority': return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || cmpDate(a.deadline, b.deadline);
-      case 'deadline': return cmpDate(a.deadline, b.deadline) || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-      case 'do_date': return cmpDate(a.do_date, b.do_date);
-      case 'follow_up_date': return cmpDate(a.follow_up_date, b.follow_up_date);
+      case 'deadline': return cmpDate(a.deadline, b.deadline) || cmpDate(a.deadline_time, b.deadline_time) || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      case 'do_date': return cmpDate(a.do_date, b.do_date) || cmpDate(a.do_time, b.do_time);
+      case 'follow_up_date': return cmpDate(a.follow_up_date, b.follow_up_date) || cmpDate(a.follow_up_time, b.follow_up_time);
       case 'created': return b.created_at.localeCompare(a.created_at);
       case 'updated': return b.updated_at.localeCompare(a.updated_at);
       case 'completed': return (b.completed_at ?? '').localeCompare(a.completed_at ?? '');
@@ -175,41 +177,38 @@ export interface ViewDef {
 
 export const VIEWS: ViewDef[] = [
   {
-    id: 'today', name: 'Today', hint: 'Do date or deadline is today',
+    id: 'today', name: 'Today', hint: 'Your tasks with a do date or deadline today — switch Person to see others',
     base: (t) => t.do_date === today() || t.deadline === today(),
-    defaults: { sort: 'priority' },
+    defaults: { sort: 'deadline', person: 'me' },
   },
   {
-    id: 'overdue', name: 'Overdue', hint: 'Deadline has passed',
-    defaults: { range: 'overdue', sort: 'deadline' },
+    id: 'overdue', name: 'Overdue', hint: 'Your tasks whose deadline has passed',
+    base: (t) => isOverdue(t),
+    defaults: { sort: 'deadline', person: 'me' },
   },
   {
-    id: 'week', name: 'This week', hint: 'Deadline in the next 7 days — change the range to anything',
-    defaults: { range: 'next7', sort: 'deadline' },
+    id: 'week', name: 'This week', hint: 'Your deadlines in the next 7 days — change the range to anything',
+    defaults: { range: 'next7', sort: 'deadline', person: 'me' },
   },
   {
-    id: 'followups', name: 'Follow-ups', hint: 'Has a follow-up date',
+    id: 'followups', name: 'Follow-ups', hint: 'Your tasks with someone to chase',
     base: (t) => !!t.follow_up_date,
-    defaults: { sort: 'follow_up_date' },
+    defaults: { sort: 'follow_up_date', person: 'me' },
   },
   {
     id: 'assign', name: 'To assign', hint: 'From your manager, nobody assigned yet',
     defaults: { givenBy: 'Manager', person: 'none', sort: 'deadline' },
   },
   {
-    id: 'mine', name: 'My tasks', hint: 'Assigned to you',
+    id: 'mine', name: 'My tasks', hint: 'Everything assigned to you',
     defaults: { person: 'me' },
   },
   {
-    id: 'everyone', name: 'Everyone', hint: 'All open tasks, by person',
-    defaults: { group: 'person' },
+    id: 'done', name: 'Done', hint: 'What you finished, newest first',
+    defaults: { status: 'Done', sort: 'completed', person: 'me' },
   },
   {
-    id: 'done', name: 'Done', hint: 'Finished, newest first',
-    defaults: { status: 'Done', sort: 'completed' },
-  },
-  {
-    id: 'all', name: 'All tasks', hint: 'Everything, open and done',
+    id: 'all', name: 'All tasks', hint: 'Everyone’s tasks, open and done',
     defaults: { status: 'all', sort: 'updated' },
   },
 ];

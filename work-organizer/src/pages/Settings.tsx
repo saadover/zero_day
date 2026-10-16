@@ -55,23 +55,52 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
   );
 }
 
+type ProfileDraft = Pick<Profile, 'full_name' | 'color' | 'theme' | 'notify_email' | 'email_enabled' | 'push_enabled' | 'digest_enabled'
+  | 'digest_time' | 'remind_due_tomorrow' | 'remind_due_today' | 'remind_due_soon' | 'remind_overdue' | 'remind_followups' | 'remind_assigned'
+  | 'quiet_start' | 'quiet_end' | 'quiet_weekends'>;
+const DRAFT_KEYS: (keyof ProfileDraft)[] = ['full_name', 'color', 'theme', 'notify_email', 'email_enabled', 'push_enabled', 'digest_enabled', 'digest_time',
+  'remind_due_tomorrow', 'remind_due_today', 'remind_due_soon', 'remind_overdue', 'remind_followups', 'remind_assigned', 'quiet_start', 'quiet_end', 'quiet_weekends'];
+const hm = (t: string | null) => (t ? t.slice(0, 5) : null);
+const pick = (p: Profile): ProfileDraft => {
+  const o = Object.fromEntries(DRAFT_KEYS.map((k) => [k, p[k]])) as ProfileDraft;
+  o.digest_time = hm(o.digest_time) ?? '08:00'; o.quiet_start = hm(o.quiet_start); o.quiet_end = hm(o.quiet_end);
+  o.remind_due_today = o.remind_due_today ?? true; o.remind_due_soon = o.remind_due_soon ?? true;
+  return o;
+};
+
 export function SettingsPage() {
   const { me, update } = useData();
   const toast = useToast();
   const [push, setPush] = useState<'on' | 'off' | 'denied' | 'unsupported' | '…'>('…');
-  const [name, setName] = useState(me?.full_name ?? '');
-  const [notifyEmail, setNotifyEmail] = useState(me?.notify_email ?? '');
   const [testing, setTesting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<ProfileDraft | null>(null);
 
   useEffect(() => { currentPushState().then(setPush); }, []);
-  useEffect(() => { setName(me?.full_name ?? ''); setNotifyEmail(me?.notify_email ?? ''); }, [me?.full_name, me?.notify_email]);
 
   if (!me) return null;
-  const set = (patch: Partial<Profile>) => update('profiles', { id: me.id }, patch);
+  const saved = pick(me);
+  const d = draft ?? saved;
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
+  const set = (patch: Partial<ProfileDraft>) => setDraft({ ...d, ...patch });
 
+  const save = async () => {
+    if (!d.full_name.trim()) { toast.error('Your name can’t be empty.'); return; }
+    if (d.notify_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.notify_email)) { toast.error('That notification email doesn’t look right.'); return; }
+    setBusy(true);
+    const patch = Object.fromEntries(DRAFT_KEYS.filter((k) => d[k] !== saved[k]).map((k) => [k, k === 'full_name' ? d.full_name.trim() : d[k]]));
+    await update('profiles', { id: me.id }, patch as Partial<Profile>);
+    if (patch.theme) applyTheme(d.theme as Theme);
+    setDraft(null);
+    setBusy(false);
+    toast.show('Settings saved');
+  };
+  const cancel = () => { setDraft(null); applyTheme(saved.theme as Theme); };
+
+  // Turning this device's notifications on/off is a browser permission, so it happens straight away.
   const togglePush = async () => {
     try {
-      if (push === 'on') { await disablePush(); setPush('off'); return; }
+      if (push === 'on') { await disablePush(); setPush('off'); toast.show('Desktop notifications off on this device'); return; }
       const r = await enablePush(me.id);
       if (r === 'ok') { setPush('on'); showLocal('Desktop notifications are on', 'Reminders will appear here, even when the app is closed.'); }
       else if (r === 'denied') { setPush('denied'); toast.error('Notifications are blocked for this site. Allow them in your browser’s site settings.'); }
@@ -81,6 +110,7 @@ export function SettingsPage() {
   };
 
   const sendTest = async () => {
+    if (dirty) { toast.error('Save your changes first, then send the test.'); return; }
     setTesting(true);
     try {
       const r = await callApi<{ email: string; push: number }>('/api/test-notify', {});
@@ -89,8 +119,6 @@ export function SettingsPage() {
     setTesting(false);
   };
 
-  const theme = (me.theme ?? 'system') as Theme;
-
   return (
     <div className="page" style={{ maxWidth: 760 }}>
       <div className="page-head"><h1>Settings</h1></div>
@@ -98,24 +126,22 @@ export function SettingsPage() {
         <div className="card-box">
           <h2>Profile</h2>
           <div className="grid-2">
-            <label className="field">Name
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== me.full_name && set({ full_name: name.trim() })} />
-            </label>
+            <label className="field">Name<input className="input" value={d.full_name} onChange={(e) => set({ full_name: e.target.value })} /></label>
             <label className="field">Login email<input className="input" value={me.email} disabled /></label>
           </div>
           <div className="row-gap">
-            <span className="muted" style={{ fontSize: 12.5 }}>Colour</span>
+            <span className="muted" style={{ fontSize: 12.5 }}>Your colour <span style={{ fontSize: 11.5 }}>(used on the team calendar)</span></span>
             {PERSON_COLORS.map((c) => (
               <button key={c} aria-label={`Colour ${c}`} onClick={() => set({ color: c })}
-                style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: me.color === c ? '2px solid var(--text)' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
+                style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: d.color === c ? '2px solid var(--text)' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
             ))}
-            <Avatar person={me} size="lg" />
+            <Avatar person={{ ...me, ...d }} size="lg" />
           </div>
           <div className="row-gap">
             <span className="muted" style={{ fontSize: 12.5 }}>Theme</span>
             <div className="seg">
               {(['system', 'light', 'dark'] as Theme[]).map((t) => (
-                <button key={t} className={theme === t ? 'on' : ''} onClick={() => { applyTheme(t); set({ theme: t }); }}>
+                <button key={t} className={d.theme === t ? 'on' : ''} onClick={() => { set({ theme: t }); applyTheme(t); }}>
                   {t === 'light' && <IconSun size={13} />}{t === 'dark' && <IconMoon size={13} />}{t[0].toUpperCase() + t.slice(1)}
                 </button>
               ))}
@@ -123,48 +149,59 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <PasswordForm />
-
         <div className="card-box">
           <h2>Notifications</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <strong style={{ fontSize: 13, fontWeight: 500 }}>Where</strong>
-            <Toggle label="Email" checked={me.email_enabled} onChange={(v) => set({ email_enabled: v })} />
+            <Toggle label="Email" checked={d.email_enabled} onChange={(v) => set({ email_enabled: v })} />
             <label className="field" style={{ marginLeft: 23 }}>Send emails to
-              <input className="input" type="email" placeholder={`${me.email} (your login email)`} value={notifyEmail}
-                onChange={(e) => setNotifyEmail(e.target.value)}
-                onBlur={() => notifyEmail.trim() !== (me.notify_email ?? '') && set({ notify_email: notifyEmail.trim() || null })} />
+              <input className="input" type="email" placeholder={`${me.email} (your login email)`} value={d.notify_email ?? ''}
+                onChange={(e) => set({ notify_email: e.target.value.trim() || null })} />
             </label>
-            <div className="row-gap">
-              <Toggle label="Desktop notifications on this device"
-                hint={push === 'denied' ? 'Blocked in this browser — allow notifications in the site settings.' : push === 'unsupported' ? 'Not supported in this browser.' : !pushConfigured() ? 'Not set up on the server yet.' : 'Pop-ups on this computer or phone, even when the app is closed.'}
-                checked={push === 'on'} onChange={togglePush} />
+            <Toggle label="Desktop notifications (all my devices)" hint="Turn off to pause pop-ups everywhere." checked={d.push_enabled} onChange={(v) => set({ push_enabled: v })} />
+            <div className="row-gap" style={{ marginLeft: 23 }}>
+              <span style={{ fontSize: 13 }}>This device: <b style={{ fontWeight: 500 }}>{push === 'on' ? 'on' : push === 'denied' ? 'blocked by the browser' : push === 'unsupported' ? 'not supported' : 'off'}</b></span>
+              {push !== 'unsupported' && push !== 'denied' && (
+                <button className="btn sm" onClick={togglePush}>{push === 'on' ? 'Turn off on this device' : 'Turn on for this device'}</button>
+              )}
+              {!pushConfigured() && <span className="muted" style={{ fontSize: 12 }}>Not set up on the server yet.</span>}
             </div>
-            <Toggle label="Desktop notifications (all my devices)" hint="Turn off to pause pop-ups everywhere without unsubscribing." checked={me.push_enabled} onChange={(v) => set({ push_enabled: v })} />
 
             <strong style={{ fontSize: 13, fontWeight: 500, marginTop: 8 }}>What</strong>
             <div className="row-gap">
-              <Toggle label="Morning summary" hint="Today's tasks, overdue items and follow-ups due." checked={me.digest_enabled} onChange={(v) => set({ digest_enabled: v })} />
-              <input type="time" className="input" style={{ width: 110 }} value={me.digest_time.slice(0, 5)} aria-label="Summary time" onChange={(e) => e.target.value && set({ digest_time: e.target.value })} />
+              <Toggle label="Morning summary" hint="Today's tasks, overdue items and follow-ups due." checked={d.digest_enabled} onChange={(v) => set({ digest_enabled: v })} />
+              <input type="time" className="input" style={{ width: 110 }} value={d.digest_time} aria-label="Summary time" onChange={(e) => e.target.value && set({ digest_time: e.target.value })} />
             </div>
-            <Toggle label="High-priority deadline tomorrow" checked={me.remind_due_tomorrow} onChange={(v) => set({ remind_due_tomorrow: v })} />
-            <Toggle label="Task became overdue" hint="Once per task." checked={me.remind_overdue} onChange={(v) => set({ remind_overdue: v })} />
-            <Toggle label="Follow-up day" hint="“Today, chase Sarah about the contract.”" checked={me.remind_followups} onChange={(v) => set({ remind_followups: v })} />
-            <Toggle label="Someone assigned me a task" checked={me.remind_assigned} onChange={(v) => set({ remind_assigned: v })} />
+            <Toggle label="Due today" hint="When a task is due today and wasn't in the morning summary (e.g. added later)." checked={d.remind_due_today} onChange={(v) => set({ remind_due_today: v })} />
+            <Toggle label="Due soon" hint="About an hour before a deadline that has a time." checked={d.remind_due_soon} onChange={(v) => set({ remind_due_soon: v })} />
+            <Toggle label="High-priority deadline tomorrow" checked={d.remind_due_tomorrow} onChange={(v) => set({ remind_due_tomorrow: v })} />
+            <Toggle label="Task became overdue" hint="Once per task." checked={d.remind_overdue} onChange={(v) => set({ remind_overdue: v })} />
+            <Toggle label="Follow-up day" hint="“Today, chase Sarah about the contract.”" checked={d.remind_followups} onChange={(v) => set({ remind_followups: v })} />
+            <Toggle label="Someone assigned me a task" checked={d.remind_assigned} onChange={(v) => set({ remind_assigned: v })} />
             <span className="muted" style={{ fontSize: 12 }}>“Remind me” times set on a task are always sent.</span>
 
             <strong style={{ fontSize: 13, fontWeight: 500, marginTop: 8 }}>Quiet hours</strong>
             <div className="row-gap">
               <span style={{ fontSize: 13 }}>No notifications from</span>
-              <input type="time" className="input" style={{ width: 110 }} value={me.quiet_start?.slice(0, 5) ?? ''} aria-label="Quiet from" onChange={(e) => set({ quiet_start: e.target.value || null })} />
+              <input type="time" className="input" style={{ width: 110 }} value={d.quiet_start ?? ''} aria-label="Quiet from" onChange={(e) => set({ quiet_start: e.target.value || null })} />
               <span style={{ fontSize: 13 }}>to</span>
-              <input type="time" className="input" style={{ width: 110 }} value={me.quiet_end?.slice(0, 5) ?? ''} aria-label="Quiet until" onChange={(e) => set({ quiet_end: e.target.value || null })} />
+              <input type="time" className="input" style={{ width: 110 }} value={d.quiet_end ?? ''} aria-label="Quiet until" onChange={(e) => set({ quiet_end: e.target.value || null })} />
             </div>
-            <Toggle label="Quiet at weekends" checked={me.quiet_weekends} onChange={(v) => set({ quiet_weekends: v })} />
+            <Toggle label="Quiet at weekends" checked={d.quiet_weekends} onChange={(v) => set({ quiet_weekends: v })} />
             <span className="muted" style={{ fontSize: 12 }}>Times use your time zone: {me.timezone}. Anything held back during quiet hours is sent when they end.</span>
             <div><button className="btn" disabled={testing} onClick={sendTest}>{testing ? 'Sending…' : 'Send me a test notification'}</button></div>
           </div>
         </div>
+
+        <div className="save-bar" style={{ marginTop: 0 }}>
+          <span className="muted" style={{ fontSize: 12.5 }}>{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn" disabled={!dirty || busy} onClick={cancel}>Cancel</button>
+            <button className="btn primary" disabled={!dirty || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+          </span>
+        </div>
+
+        <PasswordForm />
       </div>
     </div>
   );

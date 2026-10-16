@@ -3,10 +3,18 @@ import { toDateStr } from './dates';
 import type { Category, Priority, Profile, Tag } from './types';
 import { CATEGORIES } from './types';
 
+function timeOf(r: chrono.ParsedResult): string | null {
+  if (!r.start.isCertain('hour')) return null;
+  const d = r.start.date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 export interface QuickAddResult {
   title: string;
   deadline: string | null;
+  deadlineTime: string | null;
   doDate: string | null;
+  doTime: string | null;
   priority: Priority | null;
   category: Category | null;
   assignees: string[];
@@ -25,7 +33,7 @@ export interface QuickAddResult {
 export function parseQuickAdd(input: string, people: Profile[], meId: string, tags: Tag[]): QuickAddResult {
   let text = ` ${input} `;
   const out: QuickAddResult = {
-    title: '', deadline: null, doDate: null, priority: null, category: null, assignees: [], tagNames: [], manager: false,
+    title: '', deadline: null, deadlineTime: null, doDate: null, doTime: null, priority: null, category: null, assignees: [], tagNames: [], manager: false,
   };
 
   text = text.replace(/\s!(high|h|1|urgent|medium|med|m|2|low|l|3)(?=\s)/gi, (_, p: string) => {
@@ -59,13 +67,14 @@ export function parseQuickAdd(input: string, people: Profile[], meId: string, ta
   const doMatch = text.match(/\sdo:\s*([^!#@+]+?)(?=\s(?:due|by)\b|\s[!#@+]|\s*$)/i);
   if (doMatch) {
     const r = chrono.parse(doMatch[1], new Date(), { forwardDate: true })[0];
-    if (r) { out.doDate = toDateStr(r.start.date()); text = text.replace(doMatch[0], ' '); }
+    if (r) { out.doDate = toDateStr(r.start.date()); out.doTime = timeOf(r); text = text.replace(doMatch[0], ' '); }
   }
 
   const results = chrono.parse(text, new Date(), { forwardDate: true });
   const r = results[results.length - 1];
   if (r) {
     out.deadline = toDateStr(r.start.date());
+    out.deadlineTime = timeOf(r);
     text = text.slice(0, r.index) + text.slice(r.index + r.text.length);
     text = text.replace(/\s(due|by|on)\s*$/i, ' ');
   }

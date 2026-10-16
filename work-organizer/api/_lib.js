@@ -7,6 +7,9 @@ const SECRET = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_R
 
 export function admin() {
   if (!SUPABASE_URL || !SECRET) throw new HttpError(500, 'Server is missing SUPABASE_SECRET_KEY. Add it in Vercel → Settings → Environment Variables.');
+  if (SECRET.startsWith('sb_publishable_') || SECRET === process.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+    throw new HttpError(500, 'SUPABASE_SECRET_KEY in Vercel is the publishable key. Use the secret key (starts with sb_secret_) from Supabase → Project Settings → API Keys, then redeploy.');
+  }
   return createClient(SUPABASE_URL, SECRET, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 

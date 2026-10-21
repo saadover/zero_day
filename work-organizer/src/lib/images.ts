@@ -8,6 +8,13 @@ export const isImage = (f: { type?: string; name: string }) =>
   (f.type ?? '').startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|heic)$/i.test(f.name);
 
 export const isPdf = (f: { type?: string; name: string }) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+export const WORD_TYPES = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+export const isWord = (f: { type?: string; name: string }) => WORD_TYPES.includes(f.type ?? '') || /\.docx?$/i.test(f.name);
+/** Content type to store a document with. */
+export const docType = (f: { type?: string; name: string }) =>
+  isPdf(f) ? 'application/pdf' : /\.doc$/i.test(f.name) ? WORD_TYPES[0] : WORD_TYPES[1];
+/** Short badge for a file in lists. */
+export const fileBadge = (f: { name: string }) => (/\.docx?$/i.test(f.name) ? 'DOC' : 'PDF');
 
 function toBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
@@ -49,8 +56,8 @@ export async function compressImage(file: File): Promise<File> {
 export async function prepareFiles(files: File[], onError: (msg: string) => void): Promise<File[]> {
   const out: File[] = [];
   for (const f of files) {
-    if (isPdf(f)) {
-      if (f.size > 10 * 1024 * 1024) { onError(`${f.name}: PDFs must be 10 MB or smaller.`); continue; }
+    if (isPdf(f) || isWord(f)) {
+      if (f.size > 10 * 1024 * 1024) { onError(`${f.name}: files must be 10 MB or smaller.`); continue; }
       out.push(f);
     } else if (isImage(f)) {
       try {
@@ -58,7 +65,7 @@ export async function prepareFiles(files: File[], onError: (msg: string) => void
         out.push(await compressImage(named));
       } catch (e) { onError((e as Error).message); }
     } else {
-      onError(`${f.name}: only PDFs and images can be attached.`);
+      onError(`${f.name}: only PDFs, Word documents and images can be attached.`);
     }
   }
   return out;

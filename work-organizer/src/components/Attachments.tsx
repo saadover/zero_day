@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { timeAgo } from '../lib/dates';
-import { isImage, prepareFiles } from '../lib/images';
+import { fileBadge, isImage, prepareFiles } from '../lib/images';
 import { supabase } from '../lib/supabase';
 import type { Attachment } from '../lib/types';
 import { useActions } from '../store/actions';
@@ -108,11 +108,11 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
       onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); add([...e.dataTransfer.files]); } }}>
       <div className="section-h">
         Files
-        {!readOnly && <span className="muted" style={{ fontSize: 11.5 }}>PDFs & images · paste a screenshot with Ctrl+V</span>}
+        {!readOnly && <span className="muted" style={{ fontSize: 11.5 }}>PDFs, Word & images · paste a screenshot with Ctrl+V</span>}
         {!readOnly && <button className="btn ghost sm r" disabled={busy} onClick={() => inputRef.current?.click()}>
           <IconPaperclip size={13} /> {busy ? 'Compressing…' : 'Attach'}
         </button>}
-        <input ref={inputRef} type="file" accept="application/pdf,.pdf,image/*" multiple hidden
+        <input ref={inputRef} type="file" accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; add(f); }} />
       </div>
 
@@ -145,7 +145,7 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
 
       {docs.map((a) => (
         <div className="file" key={a.id}>
-          <span className="fi">PDF</span>
+          <span className={`fi ${fileBadge(a) === 'DOC' ? 'doc' : ''}`}>{fileBadge(a)}</span>
           <button className="vbtn grow" style={{ margin: 0, flexDirection: 'column', alignItems: 'flex-start', gap: 0 }} onClick={() => act.openAttachment(a.path).catch((e) => toast.error(e.message))}>
             <span className="ellipsis" style={{ maxWidth: '100%' }}>{a.name}</span>
             <span className="muted" style={{ fontSize: 11.5 }}>{formatBytes(a.size)} · {firstName(personById.get(a.uploaded_by ?? ''))} · {timeAgo(a.created_at)}</span>
@@ -156,13 +156,13 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
       ))}
       {newFiles.map((f, i) => !isImage(f) && (
         <div className="file" key={`p${i}`} style={{ borderStyle: 'dashed' }}>
-          <span className="fi">PDF</span>
+          <span className={`fi ${fileBadge(f) === 'DOC' ? 'doc' : ''}`}>{fileBadge(f)}</span>
           <span className="grow ellipsis">{f.name} <span className="muted" style={{ fontSize: 11.5 }}>· {formatBytes(f.size)} · uploads when you save</span></span>
           {!readOnly && <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => onRemoveNew(i)}><IconX size={14} /></button>}
         </div>
       ))}
       {shown.length === 0 && newFiles.length === 0 && (
-        <span className="muted" style={{ fontSize: 12.5 }}>No files yet. Drop, paste or attach — images are shrunk automatically, PDFs up to 10 MB.</span>
+        <span className="muted" style={{ fontSize: 12.5 }}>No files yet. Drop, paste or attach — images are shrunk automatically; PDFs and Word files up to 10 MB.</span>
       )}
 
       {view && <Lightbox src={view.src} name={view.name} onClose={() => setView(null)}

@@ -153,6 +153,7 @@ export interface Attachment {
   id: string;
   task_id: string | null;
   meeting_id: string | null;
+  routine_id?: string | null;
   name: string;
   size: number;
   path: string;
@@ -192,6 +193,8 @@ export interface Routine {
   id: string;
   title: string;
   notes: string;
+  /** Separate notes (upgrade 8); `notes` keeps them joined for alarms and exports. */
+  note_list?: string[];
   at_time: string;
   days: number[];
   scope: 'personal' | 'team';

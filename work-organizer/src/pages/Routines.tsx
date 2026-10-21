@@ -1,12 +1,39 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Attachments } from '../components/Attachments';
 import { Avatar, firstName } from '../components/Atoms';
-import { IconPlus, IconTrash, IconUsers } from '../components/Icons';
+import { IconChevronDown, IconPaperclip, IconPlus, IconTrash, IconUsers, IconX } from '../components/Icons';
 import { useToast } from '../components/Toast';
 import { fmtTime, hhmm, nowTime, today } from '../lib/dates';
 import { atToday, claimRun, daysLabel, finishRun, happensOn, isEveryDay, isWeekdays, releaseRun, runOf, visibleTo, WEEKDAYS } from '../lib/routines';
 import type { Routine } from '../lib/types';
+import { useActions } from '../store/actions';
 import { useData } from '../store/data';
+
+/** A reminder's separate notes (older reminders have one note in `notes`). */
+export const notesOf = (r: Routine): string[] => (r.note_list?.length ? r.note_list : r.notes ? [r.notes] : []);
+
+/** "2 notes · 1 file" toggle + the notes and files underneath. */
+function useDetails(r: Routine) {
+  const { db } = useData();
+  const [open, setOpen] = useState(false);
+  const notes = notesOf(r);
+  const files = db.attachments.filter((a) => a.routine_id === r.id);
+  const parts = [notes.length && `${notes.length} note${notes.length > 1 ? 's' : ''}`, files.length && `${files.length} file${files.length > 1 ? 's' : ''}`].filter(Boolean);
+  const toggle = parts.length ? (
+    <button className="linkish rt-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+      {files.length > 0 && <IconPaperclip size={11} />}{parts.join(' · ')}
+      <IconChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : undefined }} />
+    </button>
+  ) : null;
+  const body = open && parts.length ? (
+    <div className="rt-details">
+      {notes.map((n, i) => <div key={i} className="rt-note">{n}</div>)}
+      {files.length > 0 && <Attachments saved={files} newFiles={[]} removed={[]} readOnly onAdd={() => undefined} onRemoveSaved={() => undefined} onRemoveNew={() => undefined} />}
+    </div>
+  ) : null;
+  return { toggle, body };
+}
 
 /** Today's state of one reminder, with the pick-up / done buttons. */
 export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) {
@@ -26,11 +53,12 @@ export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) 
     const other = await claimRun(r.id, day, meId);
     if (other) toast.error(`${firstName(personById.get(other))} is already on it.`);
   });
+  const details = useDetails(r);
 
   return (
-    <div className="trow" style={{ cursor: 'default', gap: 10, padding: compact ? '6px 4px' : '8px 14px' }}>
+    <div className="trow" style={{ cursor: 'default', gap: 10, padding: compact ? '6px 4px' : '8px 14px', alignItems: 'flex-start' }}>
       <span className="mono" style={{ width: 44, fontSize: 12.5, color: upcoming ? 'var(--text-3)' : 'var(--text)' }}>{time}</span>
-      <span className="grow" style={{ minWidth: 0 }}>
+      <div className="grow" style={{ minWidth: 0 }}>
         <span className={`title ${run?.done_by ? 'done' : ''}`} style={{ display: 'block' }}>{r.title}</span>
         <span className="meta" style={{ width: 'auto' }}>
           {r.scope === 'team' ? 'Team' : 'Just me'}
@@ -38,7 +66,9 @@ export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) 
             : claimedBy ? ` · ${claimedBy.id === meId ? 'you are' : `${firstName(claimedBy)} is`} on it since ${fmtTime(run!.claimed_at!)}`
               : upcoming ? '' : ' · not picked up yet'}
         </span>
-      </span>
+        {!compact && details.toggle}
+        {!compact && details.body}
+      </div>
       {claimedBy && !doneBy && <Avatar person={claimedBy} />}
       {!canDo ? null : doneBy ? (
         <button className="btn ghost sm" disabled={busy} onClick={() => act(() => releaseRun(r.id, day))}>Undo</button>
@@ -54,11 +84,19 @@ export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) 
   );
 }
 
-interface Draft { id?: string; title: string; at_time: string; days: number[]; scope: 'personal' | 'team'; notes: string }
-const blank: Draft = { title: '', at_time: '09:00', days: [1, 2, 3, 4, 5], scope: 'personal', notes: '' };
+interface Draft {
+  id?: string; title: string; at_time: string; days: number[]; scope: 'personal' | 'team';
+  notes: string[]; newFiles: File[]; removedFiles: string[];
+}
+const blank: Draft = { title: '', at_time: '09:00', days: [1, 2, 3, 4, 5], scope: 'personal', notes: [''], newFiles: [], removedFiles: [] };
+const draftOf = (r: Routine): Draft => ({
+  id: r.id, title: r.title, at_time: hhmm(r.at_time), days: r.days, scope: r.scope,
+  notes: notesOf(r).length ? notesOf(r) : [''], newFiles: [], removedFiles: [],
+});
 
 function Editor({ initial, onClose }: { initial: Draft; onClose: () => void }) {
-  const { insert, update, meId } = useData();
+  const { db, insert, update, meId, can } = useData();
+  const act = useActions();
   const toast = useToast();
   const [d, setD] = useState<Draft>(initial);
   const [busy, setBusy] = useState(false);
@@ -70,9 +108,18 @@ function Editor({ initial, onClose }: { initial: Draft; onClose: () => void }) {
     if (!d.days.length) { toast.error('Pick at least one day.'); return; }
     setBusy(true);
     try {
-      const row = { title: d.title.trim(), at_time: d.at_time, days: d.days, scope: d.scope, notes: d.notes };
-      if (d.id) await update('routines', { id: d.id }, row);
-      else await insert('routines', { ...row, owner_id: meId });
+      const notes = d.notes.map((n) => n.trim()).filter(Boolean);
+      const row = { title: d.title.trim(), at_time: d.at_time, days: d.days, scope: d.scope, note_list: notes, notes: notes.join('\n\n') };
+      let id = d.id;
+      if (id) await update('routines', { id }, row);
+      else id = (await insert('routines', { ...row, owner_id: meId }))[0].id;
+      for (const f of d.newFiles) {
+        try { await act.uploadPdf(f, { routine_id: id }); } catch (e) { toast.error(`${f.name}: ${(e as Error).message}`); }
+      }
+      for (const fid of d.removedFiles) {
+        const a = db.attachments.find((x) => x.id === fid);
+        if (a) await act.deleteAttachment(a.id, a.path);
+      }
       toast.show('Reminder saved');
       onClose();
     } finally { setBusy(false); }
@@ -103,13 +150,41 @@ function Editor({ initial, onClose }: { initial: Draft; onClose: () => void }) {
           {d.scope === 'team' ? 'Everyone gets the alarm. The first to click “I’m on it” takes it — the others see who’s doing it, so it isn’t done twice.' : 'Only you get the alarm.'}
         </span>
       </div>
-      <label className="field">Notes (optional)<textarea className="textarea" rows={2} value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} /></label>
+      <div className="field">
+        <span>Notes <span className="muted">(optional — one box per note)</span></span>
+        {d.notes.map((n, i) => (
+          <div key={i} className="rt-note-edit">
+            <span className="rt-note-n mono">{i + 1}</span>
+            <textarea className="textarea" rows={2} value={n} placeholder={i === 0 ? 'e.g. Use the shared mailbox, not your own' : 'Another note'}
+              autoFocus={i > 0 && i === d.notes.length - 1 && !n} aria-label={`Note ${i + 1}`}
+              onChange={(e) => setD({ ...d, notes: d.notes.map((x, j) => (j === i ? e.target.value : x)) })} />
+            {(d.notes.length > 1 || n) && (
+              <button className="btn ghost icon sm" aria-label={`Remove note ${i + 1}`}
+                onClick={() => setD({ ...d, notes: d.notes.length > 1 ? d.notes.filter((_, j) => j !== i) : [''] })}><IconX size={13} /></button>
+            )}
+          </div>
+        ))}
+        <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setD({ ...d, notes: [...d.notes, ''] })}><IconPlus size={13} /> Add another note</button>
+      </div>
+      <Attachments
+        saved={d.id ? db.attachments.filter((a) => a.routine_id === d.id) : []}
+        newFiles={d.newFiles} removed={d.removedFiles}
+        readOnly={!can('files_upload')}
+        onAdd={(files) => setD((x) => ({ ...x, newFiles: [...x.newFiles, ...files] }))}
+        onRemoveSaved={(fid) => setD((x) => ({ ...x, removedFiles: [...x.removedFiles, fid] }))}
+        onRemoveNew={(i) => setD((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}
+      />
       <div className="row-gap" style={{ justifyContent: 'flex-end' }}>
         <button className="btn" disabled={busy} onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={busy || (!dirty && !!d.id)} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
   );
+}
+
+function RoutineInfo({ r, children }: { r: Routine; children: React.ReactNode }) {
+  const details = useDetails(r);
+  return <div className="grow" style={{ minWidth: 0 }}>{children}{details.toggle}{details.body}</div>;
 }
 
 export function RoutinesPage() {
@@ -145,16 +220,16 @@ export function RoutinesPage() {
           {mine.map((r) => (
             <div key={r.id} className="trow" style={{ cursor: 'default', opacity: r.active ? 1 : 0.55 }}>
               <span className="mono" style={{ width: 44, fontSize: 12.5 }}>{hhmm(r.at_time)}</span>
-              <span className="grow" style={{ minWidth: 0 }}>
+              <RoutineInfo r={r}>
                 <span className="title" style={{ display: 'block' }}>{r.title}</span>
                 <span className="meta" style={{ width: 'auto' }}>
                   {daysLabel(r.days)} · {r.scope === 'team' ? 'Whole team' : 'Just me'}
                   {r.scope === 'team' && r.created_by && ` · set up by ${r.created_by === meId ? 'you' : firstName(personById.get(r.created_by))}`}
                   {!r.active && ' · paused'}
                 </span>
-              </span>
+              </RoutineInfo>
               {manage && <>
-              <button className="btn ghost sm" onClick={() => setEditing({ id: r.id, title: r.title, at_time: hhmm(r.at_time), days: r.days, scope: r.scope, notes: r.notes })}>Edit</button>
+              <button className="btn ghost sm" onClick={() => setEditing(draftOf(r))}>Edit</button>
               <button className="btn ghost sm" onClick={() => update('routines', { id: r.id }, { active: !r.active })}>{r.active ? 'Pause' : 'Resume'}</button>
               <button className="btn ghost sm icon" aria-label="Delete reminder" onClick={() => { if (confirm(`Delete “${r.title}”?`)) remove('routines', { id: r.id }); }}><IconTrash size={14} /></button>
               </>}

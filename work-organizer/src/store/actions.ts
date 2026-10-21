@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { isImage, isPdf } from '../lib/images';
+import { docType, isImage, isPdf, isWord } from '../lib/images';
 import { supabase } from '../lib/supabase';
 import type { Tag, TagColor, Task, TaskRow } from '../lib/types';
 import { TAG_COLORS } from '../lib/types';
@@ -69,14 +69,14 @@ export function useActions() {
     if (tag && t && !t.tags.includes(tag.id)) await insert('task_tags', { task_id: taskId, tag_id: tag.id });
   }, [ensureTags, taskById, insert]);
 
-  /** Upload a PDF or an (already compressed) image. */
-  const uploadPdf = useCallback(async (file: File, owner: { task_id?: string; meeting_id?: string }) => {
-    const pdf = isPdf(file);
-    if (!pdf && !isImage(file)) throw new Error('Only PDFs and images can be attached.');
+  /** Upload a PDF, Word document or an (already compressed) image. */
+  const uploadPdf = useCallback(async (file: File, owner: { task_id?: string; meeting_id?: string; routine_id?: string }) => {
+    const doc = isPdf(file) || isWord(file);
+    if (!doc && !isImage(file)) throw new Error('Only PDFs, Word documents and images can be attached.');
     if (file.size > 10 * 1024 * 1024) throw new Error('Files must be 10 MB or smaller.');
     const safe = file.name.replace(/[^\w.\- ]+/g, '_');
-    const path = `${owner.task_id ?? owner.meeting_id}/${crypto.randomUUID()}-${safe}`;
-    const contentType = pdf ? 'application/pdf' : file.type || 'image/webp';
+    const path = `${owner.task_id ?? owner.meeting_id ?? owner.routine_id}/${crypto.randomUUID()}-${safe}`;
+    const contentType = doc ? docType(file) : file.type || 'image/webp';
     const { error } = await supabase.storage.from('attachments').upload(path, file, { contentType });
     if (error) throw error;
     await insert('attachments', { ...owner, name: file.name, size: file.size, path });

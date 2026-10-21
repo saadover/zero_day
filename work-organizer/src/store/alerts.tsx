@@ -146,7 +146,11 @@ function AlertStack({ visible, snoozedCount, done, snooze }: {
 }
 
 function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => void; snooze: (key: string, min: number) => void }) {
-  const { meId, can, update, reload, db, personById } = useData();
+  const { meId, can, update, reload, db, personById, taskById } = useData();
+  const task = a.taskId ? taskById.get(a.taskId) : undefined;
+  const canStatus = can('task_status') || can('task_edit');
+  // A task that isn't started yet gets "Start task"; one already in progress just "Got it".
+  const canStart = a.kind === 'task' && canStatus && !!task && task.status !== 'In progress';
   const { open } = useOpenTask();
   const toast = useToast();
   const [menu, setMenu] = useState(false);
@@ -172,6 +176,11 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
       await reload('routine_runs');
       if (other) { toast.error(`${firstName(personById.get(other))} is already on it.`); done(a.key); }
     } finally { setBusy(false); }
+  };
+  const startTask = async () => {
+    setBusy(true);
+    try { await update('tasks', { id: a.taskId! }, { status: 'In progress' }); done(a.key); toast.show(`“${task?.title}” is now In progress`); }
+    finally { setBusy(false); }
   };
   const taskDone = async () => {
     setBusy(true);
@@ -199,12 +208,17 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
           </div>
         ) : (
           <div className="alert-actions">
-            <button className="btn primary sm" disabled={busy} onClick={finish}
-              title={a.kind === 'routine' ? 'Mark this reminder done (also ticks it on the checklist)' : 'I’ve seen it — close this alert'}>Done</button>
+            {a.kind === 'routine' ? (
+              <button className="btn primary sm" disabled={busy} onClick={finish} title="Mark this reminder done (also ticks it on the checklist)">Done</button>
+            ) : canStart ? (
+              <button className="btn primary sm" disabled={busy} onClick={startTask} title="Move the task to In progress and close this alert">Start task</button>
+            ) : (
+              <button className="btn primary sm" disabled={busy} onClick={finish} title="Close this alert">Got it</button>
+            )}
             <button className="btn sm" disabled={busy} onClick={() => setMenu(true)}>Snooze…</button>
             {a.kind === 'routine' && a.team && !run?.claimed_by && can('routine_do') && <button className="btn sm" disabled={busy} onClick={claim}>I’m on it</button>}
             {a.kind === 'task' && <button className="btn ghost sm" onClick={() => open(a.taskId!)}>Open</button>}
-            {a.kind === 'task' && (can('task_status') || can('task_edit')) && <button className="btn ghost sm" disabled={busy} onClick={taskDone}>Mark task done</button>}
+            {a.kind === 'task' && canStatus && <button className="btn ghost sm" disabled={busy} onClick={taskDone}>Mark task done</button>}
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { firstName } from '../components/Atoms';
 import { ActionMenu, useAnchor } from '../components/Popover';
 import { IconChevronLeft, IconDownload, IconLock, IconPlus, IconTrash, IconUsers } from '../components/Icons';
+import { DrawingThumb } from '../components/DrawingThumb';
 import { OutlineBullets, OutlineDiagram } from '../components/OutlineDiagram';
 import { useToast } from '../components/Toast';
 import { timeAgo } from '../lib/dates';
@@ -45,11 +46,14 @@ export function ProcessesPage() {
 
   const Card = ({ p }: { p: Process }) => {
     const steps = p.outline.split(/\n/).filter((l) => l.trim()).length;
+    const drawn = (p.scene?.elements ?? []).some((e) => !(e as { isDeleted?: boolean }).isDeleted);
     return (
       <Link to={`/processes/${p.id}`} className="proc-card">
         <div className="proc-thumb">
-          {p.outline.trim() ? <OutlineDiagram root={parseOutline(p.outline, p.title)} kind={p.view === 'tree' ? 'tree' : 'mindmap'} />
-            : <span className="muted" style={{ fontSize: 12 }}>{(p.scene?.elements?.length ?? 0) > 0 ? 'Drawing' : 'Empty'}</span>}
+          {/* The drawing when it's what the process shows (or all it has), otherwise the tree / mind map */}
+          {drawn && (p.view === 'canvas' || !p.outline.trim()) ? <DrawingThumb elements={p.scene!.elements!} />
+            : p.outline.trim() ? <OutlineDiagram root={parseOutline(p.outline, p.title)} kind={p.view === 'tree' ? 'tree' : 'mindmap'} />
+              : <span className="muted" style={{ fontSize: 12 }}>Empty</span>}
         </div>
         <div className="proc-meta">
           <strong className="ellipsis">{p.title}</strong>

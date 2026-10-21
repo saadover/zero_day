@@ -133,7 +133,7 @@ function AlertStack({ visible, snoozedCount, done, snooze }: {
   const list = [...visible].sort((a, b) => b.firedAt - a.firedAt);
   const shownList = expanded ? list : list.slice(0, MAX);
   return (
-    <div className="alerts" role="region" aria-label="Alerts" aria-live="assertive">
+    <div className={`alerts ${expanded ? 'expanded' : ''}`} role="region" aria-label="Alerts" aria-live="assertive">
       {shownList.map((a) => <AlertCard key={a.key} a={a} done={done} snooze={snooze} />)}
       {list.length > MAX && (
         <button className="alerts-more" onClick={() => setExpanded(!expanded)}>

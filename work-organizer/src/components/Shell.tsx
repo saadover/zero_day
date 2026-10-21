@@ -9,7 +9,7 @@ import { useOpenTask, useUi } from '../store/ui';
 import { Avatar, Avatars } from './Atoms';
 import { CommandPalette } from './CommandPalette';
 import {
-  IconBell, IconBoard, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
+  IconBell, IconBoard, IconDownload, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
   IconSearch, IconSettings, IconUsers,
 } from './Icons';
 import { Popover, useAnchor } from './Popover';
@@ -146,6 +146,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Nav to="/checklist" icon={<IconChecklist />} label="Daily checklist" count={activeItems.length ? `${checked}/${activeItems.length}` : ''} />
         <Nav to="/reminders" icon={<IconBell />} label="Reminders" count={todaysRoutines || ''} />
         <Nav to="/meetings" icon={<IconNotes />} label="Meetings" />
+        <Nav to="/processes" icon={<IconBoard />} label="Processes" count={db.processes.length || ''} />
 
         <div className="side-label">Team</div>
         <Nav to="/team/list" icon={<IconUsers />} label="Team tasks" count={tasks.filter((x) => x.status !== 'Done').length} />
@@ -154,6 +155,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Nav to="/team/workload" icon={<IconGrid />} label="Workload" />
         <Nav to="/tasks/assign" icon={<IconFlag />} label="To assign" count={counts.assign} />
         <Nav to="/tasks/all" icon={<IconList />} label="All tasks" />
+        <Nav to="/export" icon={<IconDownload />} label="Export" />
 
         <div className="side-foot">
           <Nav to="/people" icon={<IconUsers />} label="People" count={db.profiles.length} />

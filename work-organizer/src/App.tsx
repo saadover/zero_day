@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { Shell } from './components/Shell';
@@ -11,6 +11,8 @@ import { atToday, claimRun, happensOn, runOf, visibleTo } from './lib/routines';
 import type { Routine } from './lib/types';
 import { firstName } from './components/Atoms';
 import { RoutinesPage } from './pages/Routines';
+import { ProcessesPage, ProcessPage } from './pages/Processes';
+const ExportPage = lazy(() => import('./pages/Export').then((m) => ({ default: m.ExportPage })));
 import { useToast } from './components/Toast';
 import { DataProvider, useData } from './store/data';
 import { UiProvider, useOpenTask } from './store/ui';
@@ -164,6 +166,9 @@ function Workspace() {
         <Route path="/matrix" element={<MatrixPage />} />
         <Route path="/checklist" element={<ChecklistPage />} />
         <Route path="/reminders" element={<RoutinesPage />} />
+        <Route path="/processes" element={<ProcessesPage />} />
+        <Route path="/export" element={<Suspense fallback={<div className="page"><div className="empty">Loading…</div></div>}><ExportPage /></Suspense>} />
+        <Route path="/processes/:id" element={<ProcessPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingPage />} />
         <Route path="/people" element={<TeamPage />} />

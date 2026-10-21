@@ -10,7 +10,7 @@ type DB = { [K in TableName]: Tables[K][] };
 const TABLES: TableName[] = [
   'profiles', 'tags', 'tasks', 'task_assignees', 'task_tags', 'subtasks', 'task_blockers',
   'meetings', 'meeting_actions', 'meeting_tasks', 'attachments', 'checklist_items',
-  'checklist_checks', 'notifications', 'routines', 'routine_runs',
+  'checklist_checks', 'notifications', 'routines', 'routine_runs', 'processes',
 ];
 
 const KEYS: Record<TableName, string[]> = {
@@ -18,7 +18,7 @@ const KEYS: Record<TableName, string[]> = {
   task_tags: ['task_id', 'tag_id'], subtasks: ['id'], task_blockers: ['task_id', 'blocked_by'],
   meetings: ['id'], meeting_actions: ['id'], meeting_tasks: ['meeting_id', 'task_id'], attachments: ['id'],
   checklist_items: ['id'], checklist_checks: ['item_id', 'day'], notifications: ['id'],
-  routines: ['id'], routine_runs: ['routine_id', 'day'],
+  routines: ['id'], routine_runs: ['routine_id', 'day'], processes: ['id'],
 };
 
 const emptyDB = (): DB => Object.fromEntries(TABLES.map((t) => [t, []])) as unknown as DB;

@@ -36,6 +36,8 @@ function Palette({ close }: { close: () => void }) {
       { id: 'matrix', label: 'Go to Urgent / Important', icon: <IconGrid />, run: go('/matrix'), keywords: 'eisenhower' },
       { id: 'check', label: 'Go to Daily checklist', icon: <IconChecklist />, run: go('/checklist') },
       { id: 'rem', label: 'Go to Reminders', icon: <IconChecklist />, run: go('/reminders'), keywords: 'repeating daily routine alarm' },
+      { id: 'proc', label: 'Go to Processes', icon: <IconBoard />, run: go('/processes'), keywords: 'diagram flowchart mind map tree' },
+      ...db.processes.map((p) => ({ id: `p-${p.id}`, label: `Process: ${p.title}`, icon: <IconBoard />, run: go(`/processes/${p.id}`), keywords: p.outline.slice(0, 200) })),
       { id: 'meet', label: 'Go to Meetings', icon: <IconNotes />, run: go('/meetings') },
       { id: 'team', label: 'Go to Team tasks', icon: <IconUsers />, run: go('/team/list'), keywords: 'everyone colleagues' },
       { id: 'teamcal', label: 'Go to Team calendar', icon: <IconCalendar />, run: go('/team/calendar'), keywords: 'everyone colleagues' },
@@ -49,7 +51,7 @@ function Palette({ close }: { close: () => void }) {
       } },
     ];
     return cmds;
-  }, [nav, openQuickAdd, me, update]);
+  }, [nav, openQuickAdd, me, update, db.processes]);
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();

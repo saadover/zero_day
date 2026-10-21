@@ -4,7 +4,8 @@ import { IconCopy, IconDownload, IconPlus, IconTrash } from '../components/Icons
 import { useToast } from '../components/Toast';
 import { timeAgo } from '../lib/dates';
 import { callApi, supabase } from '../lib/supabase';
-import type { TagColor } from '../lib/types';
+import type { Role, TagColor } from '../lib/types';
+import { ROLE_INFO } from '../lib/types';
 import { TAG_COLORS } from '../lib/types';
 import { useData } from '../store/data';
 
@@ -22,6 +23,7 @@ function AddMember() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState(tempPassword);
+  const [role, setRole] = useState<Role>('user');
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
 
@@ -29,7 +31,7 @@ function AddMember() {
     if (!email.trim() || password.length < 8) { toast.error('Email and a password of at least 8 characters are needed.'); return; }
     setBusy(true);
     try {
-      await callApi('/api/add-member', { email: email.trim(), full_name: name.trim(), password });
+      await callApi('/api/add-member', { email: email.trim(), full_name: name.trim(), password, role });
       setCreated({ email: email.trim(), password });
       setName(''); setEmail(''); setPassword(tempPassword());
       await reload('profiles');
@@ -50,6 +52,11 @@ function AddMember() {
         <label className="field">Name<input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Lina Haddad" /></label>
         <label className="field">Email<input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="lina@company.com" /></label>
         <label className="field">Temporary password<input className="input mono" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <label className="field">Access
+          <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            {(Object.keys(ROLE_INFO) as Role[]).map((r) => <option key={r} value={r}>{ROLE_INFO[r].label} — {ROLE_INFO[r].hint}</option>)}
+          </select>
+        </label>
         <div style={{ display: 'flex', alignItems: 'flex-end' }}>
           <button className="btn primary" disabled={busy} onClick={submit}><IconPlus size={14} /> {busy ? 'Creating…' : 'Create login'}</button>
         </div>
@@ -180,7 +187,13 @@ function StorageAndExport() {
 }
 
 export function TeamPage() {
-  const { people, meId, online, tasks, reload } = useData();
+  const { people, meId, online, tasks, reload, me, update } = useData();
+  const isAdmin = (me?.role ?? 'admin') === 'admin';
+  const changeRole = async (id: string, role: Role, label: string) => {
+    if (id === meId && role !== 'admin' && !confirm('Remove your own admin access? Another admin would have to give it back.')) return;
+    await update('profiles', { id }, { role });
+    toast.show(`${label} is now ${ROLE_INFO[role].label}`);
+  };
   const toast = useToast();
   const onlineIds = new Set(online.map((o) => o.userId));
 
@@ -199,24 +212,36 @@ export function TeamPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="scroll-x">
           <table className="tbl">
-            <thead><tr><th>Name</th><th>Email</th><th>Open tasks</th><th>Joined</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Open tasks</th><th>Joined</th><th /></tr></thead>
             <tbody>
               {people.map((p) => (
                 <tr key={p.id}>
                   <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Avatar person={p} />{p.full_name || '—'}{p.id === meId && <span className="muted">(you)</span>}
                     {onlineIds.has(p.id) && <span className="dot" style={{ background: 'var(--ok)' }} title="Online" />}</span></td>
                   <td className="muted">{p.email}</td>
+                  <td>
+                    {isAdmin ? (
+                      <select className="select" style={{ height: 28, width: 104 }} value={p.role ?? 'user'} aria-label={`Access for ${p.full_name}`}
+                        onChange={(e) => changeRole(p.id, e.target.value as Role, p.full_name || p.email)}>
+                        {(Object.keys(ROLE_INFO) as Role[]).map((r) => <option key={r} value={r}>{ROLE_INFO[r].label}</option>)}
+                      </select>
+                    ) : <span title={ROLE_INFO[p.role ?? 'user'].hint}>{ROLE_INFO[p.role ?? 'user'].label}</span>}
+                  </td>
                   <td className="mono">{tasks.filter((t) => t.status !== 'Done' && t.assignees.includes(p.id)).length}</td>
                   <td className="muted">{timeAgo(p.created_at)}</td>
                   <td style={{ textAlign: 'right' }}>
-                    {p.id !== meId && <button className="btn ghost sm danger" onClick={() => removeMember(p.id, p.full_name || p.email)}>Remove</button>}
+                    {isAdmin && p.id !== meId && <button className="btn ghost sm danger" onClick={() => removeMember(p.id, p.full_name || p.email)}>Remove</button>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <AddMember />
+        {isAdmin ? <AddMember /> : <p className="muted" style={{ fontSize: 12.5 }}>Only an admin can add people or change access.</p>}
+        <div className="card-box" style={{ gap: 6 }}>
+          <h2>Access levels</h2>
+          {(Object.keys(ROLE_INFO) as Role[]).map((r) => <span key={r} style={{ fontSize: 13 }}><b style={{ fontWeight: 500 }}>{ROLE_INFO[r].label}</b> — <span className="muted">{ROLE_INFO[r].hint}</span></span>)}
+        </div>
         <div className="grid-2" style={{ alignItems: 'start' }}>
           <Tags />
           <StorageAndExport />

@@ -5,6 +5,13 @@ export const CATEGORIES = ['Admin', 'Reporting', 'Partner', 'Meeting', 'Learning
 export const TAG_COLORS = ['gray', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'] as const;
 export const PERSON_COLORS = ['#2F5FD0', '#0F766E', '#9A3412', '#7C3AED', '#BE185D', '#4D7C0F', '#0369A1', '#A16207'];
 
+export type Role = 'admin' | 'user' | 'basic';
+export const ROLE_INFO: Record<Role, { label: string; hint: string }> = {
+  admin: { label: 'Admin', hint: 'Everything, including adding people and changing roles' },
+  user: { label: 'User', hint: 'Everything except managing people' },
+  basic: { label: 'Basic', hint: 'Tasks, checklist, meetings and reminders; can only view processes' },
+};
+
 export type Status = (typeof STATUSES)[number];
 export type Priority = (typeof PRIORITIES)[number];
 export type GivenBy = (typeof GIVEN_BY)[number];
@@ -35,6 +42,7 @@ export interface Profile {
   quiet_weekends: boolean;
   timezone: string;
   theme: 'system' | 'light' | 'dark';
+  role?: Role;
   created_at: string;
 }
 
@@ -171,6 +179,20 @@ export interface RoutineRun {
   done_at: string | null;
 }
 
+export interface Process {
+  id: string;
+  title: string;
+  outline: string;
+  scene: { elements?: unknown[]; appState?: Record<string, unknown> } | null;
+  view: 'bullets' | 'tree' | 'mindmap' | 'canvas';
+  visibility: 'team' | 'private';
+  owner_id: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tables {
   profiles: Profile;
   tags: Tag;
@@ -188,6 +210,7 @@ export interface Tables {
   notifications: AppNotification;
   routines: Routine;
   routine_runs: RoutineRun;
+  processes: Process;
 }
 
 export type TableName = keyof Tables;

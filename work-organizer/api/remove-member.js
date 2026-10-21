@@ -2,7 +2,8 @@ import { handler, HttpError, requireUser } from './_lib.js';
 
 // Deletes a teammate's login. Tasks they created stay (creator shows as unknown).
 export default handler(async (req) => {
-  const { db, user } = await requireUser(req);
+  const { db, user, profile: me } = await requireUser(req);
+  if (me.role && me.role !== 'admin') throw new HttpError(403, 'Only an admin can remove people.');
   const id = String(req.body?.user_id || '');
   if (!id) throw new HttpError(400, 'Missing user_id');
   if (id === user.id) throw new HttpError(400, 'You can’t remove yourself.');

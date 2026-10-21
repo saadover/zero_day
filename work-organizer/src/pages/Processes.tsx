@@ -134,6 +134,9 @@ export function ProcessPage() {
   const root = useMemo(() => parseOutline(d.outline, d.title || 'Process'), [d.outline, d.title]);
   const onCanvasChange = useCallback((scene: Scene) => setDraft((cur) => ({ ...(cur ?? saved), scene })), [saved]);
 
+  const exportMenu = useAnchor();
+  const [zoom, setZoom] = useState<number | 'fit'>('fit');
+
   if (!isNew && !proc) return <div className="page"><div className="empty">Process not found. <Link to="/processes">Back</Link></div></div>;
 
   const save = async () => {
@@ -188,8 +191,6 @@ export function ProcessPage() {
       ex.download(`${name}.${format}`, blob);
     } catch (e) { toast.error(`Export failed: ${(e as Error).message}`); }
   };
-  const exportMenu = useAnchor();
-  const [zoom, setZoom] = useState<number | 'fit'>('fit');
   const zoomBy = (dir: 1 | -1) => setZoom((z) => {
     const cur = z === 'fit' ? 1 : z;
     const i = ZOOMS.findIndex((v) => v >= cur);

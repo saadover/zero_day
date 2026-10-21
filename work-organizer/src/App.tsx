@@ -42,6 +42,14 @@ function useLocalAlarms() {
   const { raise } = useAlerts();
   useEffect(() => {
     if (!me) return;
+    let timers: ReturnType<typeof setTimeout>[] = [];
+    // A new task is saved first and its people a moment later — wait, so an alarm for a task
+    // assigned to someone else never rings for its creator in between.
+    const settle = setTimeout(() => { timers = schedule(); }, 3000);
+    return () => { clearTimeout(settle); timers.forEach(clearTimeout); };
+
+    function schedule() {
+    if (!me) return [];
     const now = Date.now();
     const fired = new Set(readFired());
     const mine = tasks.filter((t) => t.assignees.includes(meId) || (!t.assignees.length && t.created_by === meId));
@@ -66,10 +74,10 @@ function useLocalAlarms() {
       ring(pick, lateTitle(pick, now, t?.title ?? ''), now - pick.at < 30 * 60_000);
     }
 
-    const timers = all
+    return all
       .filter((a) => a.at > now && a.at - now < 24 * 3600_000)
       .map((a) => setTimeout(() => ring(a, a.title), a.at - now));
-    return () => timers.forEach(clearTimeout);
+    }
   }, [tasks, me, meId, raise]);
 }
 

@@ -525,3 +525,9 @@ fieldset.lock.contents { display: contents; }
 @keyframes alert-glow { 0%, 100% { box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 0 rgba(217,119,6,.0); } 50% { box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 6px rgba(217,119,6,.22); } }
 @keyframes alert-ring { 0%, 60%, 100% { transform: rotate(0); } 64% { transform: rotate(14deg); } 70% { transform: rotate(-12deg); } 76% { transform: rotate(9deg); } 82% { transform: rotate(-6deg); } 88% { transform: rotate(3deg); } }
 @media (prefers-reduced-motion: reduce) { .alert-card, .alert-icon { animation: none; } }
+
+.alert-card.good { border-left-color: var(--ok); animation: alert-in .35s cubic-bezier(.2,.9,.3,1.2), alert-glow-good 2.2s ease-in-out .4s infinite; }
+.alert-card.good .alert-icon { background: var(--ok-soft, #e3f5ea); color: var(--ok); animation: none; }
+.alert-card.info { border-left-color: var(--tag-blue); }
+.alert-card.info .alert-icon { background: var(--tag-blue-bg); color: var(--tag-blue); }
+@keyframes alert-glow-good { 0%, 100% { box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 0 rgba(22,163,74,0); } 50% { box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 6px rgba(22,163,74,.2); } }

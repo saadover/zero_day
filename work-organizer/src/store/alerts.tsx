@@ -2,7 +2,7 @@
 // Kept in this browser (per person), so they survive a reload.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { firstName } from '../components/Atoms';
-import { IconBell, IconX } from '../components/Icons';
+import { IconBell, IconCheck, IconX } from '../components/Icons';
 import { useToast } from '../components/Toast';
 import { fmtTime, today } from '../lib/dates';
 import { showLocal } from '../lib/push';
@@ -12,7 +12,10 @@ import { useOpenTask } from './ui';
 
 export interface AppAlert {
   key: string;
-  kind: 'task' | 'routine';
+  /** note = a message from a teammate's action (assigned you, started / finished your task) */
+  kind: 'task' | 'routine' | 'note';
+  notifId?: string;
+  tone?: 'good' | 'info';
   title: string;
   body: string;
   /** when it first rang (ms) */
@@ -36,6 +39,8 @@ export const useAlerts = () => {
   if (!c) throw new Error('useAlerts outside AlertsProvider');
   return c;
 };
+
+const NOTE_KINDS: Record<string, 'good' | 'info'> = { task_done: 'good', task_started: 'good', assigned: 'info' };
 
 const SNOOZES: [string, number][] = [['15 min', 15], ['30 min', 30], ['1 hour', 60], ['1 day', 1440]];
 
@@ -82,7 +87,12 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     if (!ready) return;
     setAlerts((cur) => {
       const next = cur.filter((a) => {
-        if (a.kind === 'task') { const t = tasks.find((x) => x.id === a.taskId); return !!t && t.status !== 'Done'; }
+        if (a.kind === 'note') return db.notifications.some((n) => n.id === a.notifId && !n.read_at);
+        if (a.kind === 'task') {
+          const t = tasks.find((x) => x.id === a.taskId);
+          // Gone, finished, or now assigned to someone else → not mine to be reminded of.
+          return !!t && t.status !== 'Done' && (!t.assignees.length || t.assignees.includes(meId));
+        }
         const r = db.routines.find((x) => x.id === a.routineId);
         if (!r || !r.active) return false;
         const run = runOf(db.routine_runs, r.id, a.day ?? today());
@@ -90,7 +100,22 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       });
       return next.length === cur.length ? cur : next;
     });
-  }, [ready, tasks, db.routines, db.routine_runs, meId]);
+  }, [ready, tasks, db.routines, db.routine_runs, db.notifications, meId]);
+
+  // Teammates' actions that concern you: assigned you a task, started / finished a task you created.
+  useEffect(() => {
+    if (!ready) return;
+    const since = Date.now() - 3 * 86400_000;
+    const fresh = db.notifications.filter((n) => n.user_id === meId && !n.read_at && NOTE_KINDS[n.kind] && Date.parse(n.created_at) > since);
+    if (!fresh.length) return;
+    setAlerts((cur) => {
+      const add = fresh.filter((n) => !cur.some((a) => a.key === `n:${n.id}`)).map((n): AppAlert => ({
+        key: `n:${n.id}`, kind: 'note', notifId: n.id, tone: NOTE_KINDS[n.kind], title: n.title, body: n.body,
+        taskId: n.task_id ?? undefined, firedAt: Date.parse(n.created_at),
+      }));
+      return add.length ? [...cur, ...add] : cur;
+    });
+  }, [ready, db.notifications, meId]);
 
   // Chime + desktop pop-up whenever an alert (re)appears.
   const visible = useMemo(() => alerts.filter((a) => !a.snoozeUntil || a.snoozeUntil <= now), [alerts, now]);
@@ -150,7 +175,7 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
   const task = a.taskId ? taskById.get(a.taskId) : undefined;
   const canStatus = can('task_status') || can('task_edit');
   // A task that isn't started yet gets "Start task"; one already in progress just "Got it".
-  const canStart = a.kind === 'task' && canStatus && !!task && task.status !== 'In progress';
+  const canStart = a.kind !== 'routine' && canStatus && !!task && task.status !== 'In progress';
   const { open } = useOpenTask();
   const toast = useToast();
   const [menu, setMenu] = useState(false);
@@ -182,19 +207,25 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
     try { await update('tasks', { id: a.taskId! }, { status: 'In progress' }); done(a.key); toast.show(`“${task?.title}” is now In progress`); }
     finally { setBusy(false); }
   };
+  /** Close a teammate message and mark it read (also in the Inbox, on every device). */
+  const closeNote = async () => {
+    done(a.key);
+    if (a.notifId) await update('notifications', { id: a.notifId }, { read_at: new Date().toISOString() });
+  };
   const taskDone = async () => {
     setBusy(true);
     try { await update('tasks', { id: a.taskId! }, { status: 'Done' }); done(a.key); } finally { setBusy(false); }
   };
 
   return (
-    <div className={`alert-card ${a.kind}`} role="alertdialog" aria-label={a.title}>
-      <span className="alert-icon" aria-hidden><IconBell size={15} /></span>
+    <div className={`alert-card ${a.kind} ${a.tone ?? ''}`} role="alertdialog" aria-label={a.title}>
+      <span className="alert-icon" aria-hidden>{a.tone === 'good' ? <IconCheck size={15} strokeWidth={2.2} /> : <IconBell size={15} />}</span>
       <div className="alert-main">
         <div className="alert-title">{a.title}</div>
         {a.body && <div className="alert-body">{a.body}</div>}
         <div className="alert-meta">
-          {a.kind === 'routine' ? (a.team ? 'Team reminder' : 'Reminder') : 'Task'} · rang at {fmtTime(new Date(a.firedAt).toISOString())}
+          {a.kind === 'note' ? `${a.tone === 'good' ? 'Task update' : 'New for you'} · ${fmtTime(new Date(a.firedAt).toISOString())}`
+            : <>{a.kind === 'routine' ? (a.team ? 'Team reminder' : 'Reminder') : 'Task'} · rang at {fmtTime(new Date(a.firedAt).toISOString())}</>}
           {a.snoozeUntil && ' · snoozed before'}
           {mineNow && ' · you’re on it'}
         </div>
@@ -205,6 +236,14 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
               <button key={min} className="btn sm" onClick={() => { snooze(a.key, min); setMenu(false); }}>{label}</button>
             ))}
             <button className="btn ghost sm icon" aria-label="Back" onClick={() => setMenu(false)}><IconX size={12} /></button>
+          </div>
+        ) : a.kind === 'note' ? (
+          <div className="alert-actions">
+            {a.tone === 'info' && canStart
+              ? <button className="btn primary sm" disabled={busy} onClick={async () => { await startTask(); await closeNote(); }}>Start task</button>
+              : <button className="btn primary sm" onClick={closeNote}>OK</button>}
+            {a.taskId && <button className="btn ghost sm" onClick={() => { open(a.taskId!); closeNote(); }}>Open</button>}
+            {a.tone === 'info' && canStart && <button className="btn ghost sm" onClick={closeNote}>Later</button>}
           </div>
         ) : (
           <div className="alert-actions">

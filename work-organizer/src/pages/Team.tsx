@@ -207,7 +207,7 @@ export function TeamPage() {
     <div className="page" style={{ maxWidth: 920 }}>
       <div className="page-head">
         <h1>People</h1>
-        <span className="sub">{people.length} {people.length === 1 ? 'person' : 'people'} · everyone has the same rights</span>
+        <span className="sub">{people.length} {people.length === 1 ? 'person' : 'people'} · {people.filter((p) => p.role === 'admin').length} admin{people.filter((p) => p.role === 'admin').length === 1 ? '' : 's'}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="scroll-x">

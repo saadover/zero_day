@@ -126,7 +126,8 @@ export default async function handlerFn(req, res) {
         return true;
       };
       for (const t of mine) {
-        if (p.remind_start !== false && t.do_date && hm(t.do_time)) {
+        // "Time to start" only while it isn't started yet
+        if (p.remind_start !== false && t.do_date && hm(t.do_time) && (t.status === 'To do' || t.status === 'Waiting on someone')) {
           fire('start', t, t.do_date, hm(t.do_time), t.start_alerts ?? [0], (left) => ({
             title: left <= 0 ? `Time to start: ${t.title}` : `Starts ${inWords(left)}: ${t.title}`, body: `Planned for ${hm(t.do_time)}`,
           }));

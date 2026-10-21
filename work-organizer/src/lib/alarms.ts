@@ -22,7 +22,8 @@ const at = (date: string, time: string) => {
 export function taskAlarms(t: Task): Alarm[] {
   if (t.status === 'Done') return [];
   const out: Alarm[] = [];
-  if (t.do_date && t.do_time) {
+  // "Time to start" only while it isn't started yet
+  if (t.do_date && t.do_time && (t.status === 'To do' || t.status === 'Waiting on someone')) {
     const time = hhmm(t.do_time);
     for (const m of t.start_alerts ?? [0]) {
       out.push({

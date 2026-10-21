@@ -40,7 +40,7 @@ export const useAlerts = () => {
   return c;
 };
 
-const NOTE_KINDS: Record<string, 'good' | 'info'> = { task_done: 'good', task_started: 'good', assigned: 'info' };
+const NOTE_KINDS: Record<string, 'good' | 'info'> = { task_done: 'good', task_started: 'good', task_reopened: 'info', assigned: 'info' };
 
 const SNOOZES: [string, number][] = [['15 min', 15], ['30 min', 30], ['1 hour', 60], ['1 day', 1440]];
 
@@ -91,6 +91,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
         if (a.kind === 'task') {
           const t = tasks.find((x) => x.id === a.taskId);
           // Gone, finished, or now assigned to someone else → not mine to be reminded of.
+          if (a.key.startsWith('start:') && t && t.status !== 'To do' && t.status !== 'Waiting on someone') return false; // already started
           return !!t && t.status !== 'Done' && (!t.assignees.length || t.assignees.includes(meId));
         }
         const r = db.routines.find((x) => x.id === a.routineId);
@@ -175,7 +176,8 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
   const task = a.taskId ? taskById.get(a.taskId) : undefined;
   const canStatus = can('task_status') || can('task_edit');
   // A task that isn't started yet gets "Start task"; one already in progress just "Got it".
-  const canStart = a.kind !== 'routine' && canStatus && !!task && task.status !== 'In progress';
+  // Only a task that hasn't started yet can be started — a finished one never jumps back.
+  const canStart = a.kind !== 'routine' && canStatus && !!task && (task.status === 'To do' || task.status === 'Waiting on someone');
   const { open } = useOpenTask();
   const toast = useToast();
   const [menu, setMenu] = useState(false);

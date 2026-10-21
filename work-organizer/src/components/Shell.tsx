@@ -70,7 +70,7 @@ function Bell() {
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { tasks, me, meId, db, online, personById } = useData();
+  const { tasks, me, meId, db, online, personById, can } = useData();
   const { openQuickAdd, setPaletteOpen, navOpen, setNavOpen } = useUi();
   const navigate = useNavigate();
   const loc = useLocation();
@@ -117,7 +117,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <button className="btn ghost icon" aria-label="Open menu" onClick={() => setNavOpen(true)}><IconMenu /></button>
         <strong style={{ fontSize: 14 }}>Work Organizer</strong>
         <button className="btn ghost icon" style={{ marginLeft: 'auto' }} aria-label="Search" onClick={() => setPaletteOpen(true)}><IconSearch /></button>
-        <button className="btn primary sm icon" aria-label="New task" onClick={() => openQuickAdd()}><IconPlus /></button>
+        {can('task_create') && <button className="btn primary sm icon" aria-label="New task" onClick={() => openQuickAdd()}><IconPlus /></button>}
       </div>
       {navOpen && <div className="panel-wrap" style={{ zIndex: 35 }} onClick={() => setNavOpen(false)} />}
 
@@ -129,7 +129,8 @@ export function Shell({ children }: { children: ReactNode }) {
           Work Organizer
         </div>
         <div style={{ display: 'flex', gap: 6, padding: '0 2px 10px' }}>
-          <button className="btn primary sm grow" onClick={() => openQuickAdd()}>New task <span className="kbd">N</span></button>
+          {can('task_create') ? <button className="btn primary sm grow" onClick={() => openQuickAdd()}>New task <span className="kbd">N</span></button>
+            : <span className="grow muted" style={{ fontSize: 12, alignSelf: 'center' }}>{me?.role === 'visitor' ? 'Visitor' : 'View'} access</span>}
           <button className="btn sm icon" aria-label="Search (Ctrl+K)" title="Search  Ctrl K" onClick={() => setPaletteOpen(true)}><IconSearch size={14} /></button>
         </div>
         <Nav to="/" end icon={<IconHome />} label="Dashboard" />
@@ -155,7 +156,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Nav to="/team/workload" icon={<IconGrid />} label="Workload" />
         <Nav to="/tasks/assign" icon={<IconFlag />} label="To assign" count={counts.assign} />
         <Nav to="/tasks/all" icon={<IconList />} label="All tasks" />
-        <Nav to="/export" icon={<IconDownload />} label="Export" />
+        {can('export') && <Nav to="/export" icon={<IconDownload />} label="Export" />}
 
         <div className="side-foot">
           <Nav to="/people" icon={<IconUsers />} label="People" count={db.profiles.length} />

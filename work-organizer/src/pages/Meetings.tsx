@@ -13,7 +13,7 @@ import { useData } from '../store/data';
 import { useOpenTask } from '../store/ui';
 
 export function MeetingsPage() {
-  const { db, personById } = useData();
+  const { db, personById, can } = useData();
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const list = [...db.meetings]
@@ -42,7 +42,7 @@ export function MeetingsPage() {
         <span className="sub">{db.meetings.length} notes</span>
         <div className="actions">
           <input className="input" style={{ width: 200 }} placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search meetings" />
-          <button className="btn primary" onClick={create}><IconPlus size={14} /> New meeting</button>
+          {can('meeting_edit') && <button className="btn primary" onClick={create}><IconPlus size={14} /> New meeting</button>}
         </div>
       </div>
       {upcoming.length > 0 && <><div className="side-label" style={{ paddingLeft: 2 }}>Upcoming</div><div className="list">{upcoming.map((m) => <Item key={m.id} m={m} />)}</div></>}
@@ -69,7 +69,8 @@ const toLocal = (iso: string) => {
 export function MeetingPage() {
   const { id } = useParams();
   const isNew = id === 'new';
-  const { db, tasks, update, insert, remove, meId, personById } = useData();
+  const { db, tasks, update, insert, remove, meId, personById, can } = useData();
+  const canEdit = can('meeting_edit');
   const act = useActions();
   const toast = useToast();
   const nav = useNavigate();
@@ -178,7 +179,7 @@ export function MeetingPage() {
       <div className="row-gap" style={{ marginBottom: 14 }}>
         <button className="btn ghost sm" onClick={() => { if (!(dirty && draft) || confirm('Leave without saving?')) nav('/meetings'); }}><IconChevronLeft size={14} /> Meetings</button>
         {m && <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>Created by {firstName(personById.get(m.created_by ?? ''))} · edited {timeAgo(m.updated_at)}</span>}
-        {m && (
+        {m && canEdit && (
           <button className="btn ghost sm danger" onClick={async () => {
             if (!confirm('Delete this meeting and its notes?')) return;
             const all = db.attachments.filter((a) => a.meeting_id === m.id);
@@ -188,6 +189,8 @@ export function MeetingPage() {
         )}
       </div>
 
+      {!canEdit && <p className="view-hint">View only — your access level can’t change meetings.</p>}
+      <fieldset className="lock" disabled={!canEdit}>
       <input className="panel-title" style={{ fontSize: 22, marginBottom: 6 }} value={d.title} placeholder="Meeting title" aria-label="Meeting title"
         autoFocus={isNew} onChange={(e) => edit({ title: e.target.value })} />
 
@@ -198,7 +201,9 @@ export function MeetingPage() {
         <span className="v"><input className="input bare" value={d.attendees} placeholder="Who was there" style={{ height: 28 }} onChange={(e) => edit({ attendees: e.target.value })} /></span>
       </div>
 
+      </fieldset>
       <div className="doc">
+        <fieldset className="lock" disabled={!canEdit}>
         <h3>Agenda</h3>
         <textarea className="textarea" rows={3} value={d.agenda} placeholder="1. Topic…" onChange={(e) => edit({ agenda: e.target.value })} aria-label="Agenda" />
         <h3>Notes</h3>
@@ -240,8 +245,10 @@ export function MeetingPage() {
           {linked.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: '6px 0' }}>No linked tasks.</div>}
         </div>
 
+        </fieldset>
         <h3>Files</h3>
         <Attachments
+          readOnly={!canEdit || !can('files_upload')}
           saved={m ? db.attachments.filter((a) => a.meeting_id === m.id) : []}
           newFiles={d.newFiles} removed={d.removedFiles}
           onAdd={(list) => edit((x) => ({ ...x, newFiles: [...x.newFiles, ...list] }))}
@@ -250,13 +257,13 @@ export function MeetingPage() {
         />
       </div>
 
-      <div className="save-bar">
+      {canEdit && <div className="save-bar">
         <span className="muted" style={{ fontSize: 12.5 }}>{isNew ? 'New meeting — not saved yet' : dirty ? 'Unsaved changes' : 'All changes saved'}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button className="btn" disabled={!dirty || busy} onClick={cancel}>Cancel</button>
           <button className="btn primary" disabled={!dirty || busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save'}</button>
         </span>
-      </div>
+      </div>}
 
       {linkM.anchor && (
         <SelectMenu anchor={linkM.anchor} onClose={linkM.close} search multi value={d.links}

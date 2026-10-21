@@ -24,8 +24,7 @@ const VIEWS: { id: View; label: string; hint: string }[] = [
 ];
 
 export function useCanEditProcesses() {
-  const { me } = useData();
-  return (me?.role ?? 'user') !== 'basic';
+  return useData().can('process_edit');
 }
 
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -35,6 +34,7 @@ const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 export function ProcessesPage() {
   const { db, personById, meId } = useData();
   const canEdit = useCanEditProcesses();
+  const canExport = useData().can('export');
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const list = db.processes
@@ -69,7 +69,7 @@ export function ProcessesPage() {
         <span className="sub">How we do things — as lists, trees, mind maps or free drawings</span>
         <div className="actions">
           <input className="input" style={{ width: 200 }} placeholder="Search processes" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search processes" />
-          <button className="btn" onClick={() => nav('/export?what=processes')}><IconDownload size={13} /> Export…</button>
+          {canExport && <button className="btn" onClick={() => nav('/export?what=processes')}><IconDownload size={13} /> Export…</button>}
           {canEdit && <button className="btn primary" onClick={() => nav('/processes/new')}><IconPlus size={14} /> New process</button>}
         </div>
       </div>
@@ -98,6 +98,7 @@ export function ProcessPage() {
   const isNew = id === 'new';
   const { db, insert, update, remove, personById, meId } = useData();
   const canEdit = useCanEditProcesses();
+  const canExport = useData().can('export');
   const toast = useToast();
   const nav = useNavigate();
   const proc = isNew ? undefined : db.processes.find((p) => p.id === id);
@@ -209,7 +210,7 @@ export function ProcessPage() {
               <button className={d.visibility === 'private' ? 'on' : ''} onClick={() => edit({ visibility: 'private' })}><IconLock size={13} /> Private</button>
             </div>
           )}
-          <button className="btn sm" onClick={exportMenu.open} aria-haspopup="menu"><IconDownload size={13} /> Export</button>
+          {canExport && <button className="btn sm" onClick={exportMenu.open} aria-haspopup="menu"><IconDownload size={13} /> Export</button>}
           {exportMenu.anchor && (
             <ActionMenu anchor={exportMenu.anchor} onClose={exportMenu.close} items={[
               { label: 'PDF (picture + steps)', run: () => exportAs('pdf') },

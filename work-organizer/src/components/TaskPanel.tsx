@@ -103,7 +103,10 @@ export function TaskPanel() {
 // ───────────────────────────── Panel body ─────────────────────────────
 
 function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableRefObject<boolean>; onClose: () => void }) {
-  const { db, people, personById, tasks, online, meId, insert, update, remove } = useData();
+  const { db, people, personById, tasks, online, meId, insert, update, remove, can } = useData();
+  const canEdit = can('task_edit');
+  const canStatus = canEdit || can('task_status');
+  const canFiles = can('files_upload');
   const act = useActions();
   const toast = useToast();
   const { close, open } = useOpenTask();
@@ -286,16 +289,16 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
       {moreM.anchor && (
         <ActionMenu anchor={moreM.anchor} onClose={moreM.close} items={[
           { label: 'Copy link', icon: <IconLink />, run: copyLink },
-          { label: 'Duplicate', icon: <IconCopy />, run: async () => { const r = await act.duplicateTask(task); open(r.id); } },
-          'sep',
-          { label: 'Delete task', icon: <IconTrash />, danger: true, run: async () => {
+          ...(can('task_create') ? [{ label: 'Duplicate', icon: <IconCopy />, run: async () => { const r = await act.duplicateTask(task); open(r.id); } }] : []),
+          ...(can('task_delete') ? ['sep' as const, { label: 'Delete task', icon: <IconTrash />, danger: true, run: async () => {
             if (!confirm(`Delete "${task.title}"? This can't be undone.`)) return;
             dirtyRef.current = false; close(); await act.deleteTask(task.id); toast.show('Task deleted');
-          } },
+          } }] : []),
         ]} />
       )}
 
-      <textarea className="panel-title" rows={1} ref={titleRef} aria-label="Task title" value={d.fields.title}
+      {!canEdit && <p className="view-hint" style={{ margin: 0 }}>{canStatus ? 'Your access level lets you change the status and tick sub-tasks only.' : 'View only — your access level can’t change tasks.'}</p>}
+      <textarea className="panel-title" rows={1} ref={titleRef} aria-label="Task title" value={d.fields.title} readOnly={!canEdit}
         onChange={(e) => setField('title', e.target.value.replace(/\n/g, ' '))} />
 
       {(overdue || task.blocked) && (
@@ -307,7 +310,8 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
 
       <div className="props">
         <span className="k">Status</span>
-        <span className="v"><button className="vbtn" onClick={statusM.open}><StatusIcon status={d.fields.status} />{d.fields.status}</button></span>
+        <span className="v"><button className="vbtn" disabled={!canStatus} onClick={statusM.open}><StatusIcon status={d.fields.status} />{d.fields.status}</button></span>
+        <fieldset className="lock contents" disabled={!canEdit}>
 
         <span className="k">Priority</span>
         <span className="v"><button className="vbtn" onClick={prioM.open}><PriorityIcon priority={d.fields.priority} />{d.fields.priority}</button></span>
@@ -359,26 +363,29 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
             value={d.fields.remind_at ? toLocalInput(d.fields.remind_at) : ''}
             onChange={(e) => setField('remind_at', e.target.value ? new Date(e.target.value).toISOString() : null)} />
         </span>
+        </fieldset>
       </div>
 
       {/* Subtasks */}
       <div className="section">
         <div className="section-h">
           Subtasks {d.subtasks.length > 0 && <span className="mono">{subsDone}/{d.subtasks.length}</span>}
-          <button className="btn ghost sm r" onClick={() => setBulk(bulk === null ? '' : null)}>{bulk === null ? 'Add several' : 'Close list'}</button>
+          {canEdit && <button className="btn ghost sm r" onClick={() => setBulk(bulk === null ? '' : null)}>{bulk === null ? 'Add several' : 'Close list'}</button>}
         </div>
         {d.subtasks.length > 0 && <div className="progress"><div style={{ width: `${(subsDone / d.subtasks.length) * 100}%` }} /></div>}
         {d.subtasks.map((s, i) => (
           <div className="sub-row" key={s.key}>
-            <label className="check"><input type="checkbox" checked={s.done} onChange={() => setSub(s.key, { done: !s.done })} /><span className="sr-only">Done</span></label>
-            <input className="input bare" value={s.title} aria-label="Subtask" onChange={(e) => setSub(s.key, { title: e.target.value })}
+            <label className="check"><input type="checkbox" checked={s.done} disabled={!canStatus} onChange={() => setSub(s.key, { done: !s.done })} /><span className="sr-only">Done</span></label>
+            <input className="input bare" value={s.title} aria-label="Subtask" readOnly={!canEdit} onChange={(e) => setSub(s.key, { title: e.target.value })}
               style={{ height: 28, textDecoration: s.done ? 'line-through' : undefined, color: s.done ? 'var(--text-3)' : undefined }} />
+            {canEdit && <>
             <button className="btn ghost icon sm" aria-label="Move up" disabled={i === 0} onClick={() => moveSub(i, -1)}><IconChevronDown size={13} style={{ transform: 'rotate(180deg)' }} /></button>
             <button className="btn ghost icon sm" aria-label="Move down" disabled={i === d.subtasks.length - 1} onClick={() => moveSub(i, 1)}><IconChevronDown size={13} /></button>
             <button className="btn ghost icon sm" aria-label="Remove subtask" onClick={() => edit((x) => ({ ...x, subtasks: x.subtasks.filter((y) => y.key !== s.key) }))}><IconX size={13} /></button>
+            </>}
           </div>
         ))}
-        {bulk !== null ? (
+        {!canEdit ? null : bulk !== null ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <textarea className="textarea" rows={4} autoFocus value={bulk} onChange={(e) => setBulk(e.target.value)}
               placeholder={'One per line, e.g.\nSync Australia\nSync Morocco\nSync USA'} />
@@ -398,6 +405,7 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
       </div>
 
       {/* Blockers */}
+      <fieldset className="lock" disabled={!canEdit}>
       <div className="section">
         <div className="section-h">
           Blocked by
@@ -419,6 +427,7 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
         <div className="section-h">Notes</div>
         <textarea className="textarea" placeholder="Write anything…" value={d.fields.notes} rows={4} onChange={(e) => setField('notes', e.target.value)} />
       </div>
+      </fieldset>
 
       {/* Attachments */}
       <Attachments
@@ -427,6 +436,7 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
         onAdd={(files) => edit((x) => ({ ...x, newFiles: [...x.newFiles, ...files] }))}
         onRemoveSaved={(id) => edit((x) => ({ ...x, removedFiles: [...x.removedFiles, id] }))}
         onRemoveNew={(i) => edit((x) => ({ ...x, newFiles: x.newFiles.filter((_, j) => j !== i) }))}
+        readOnly={!canFiles}
       />
 
       {linkedMeetings.length > 0 && (

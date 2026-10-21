@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { urgencyScore } from '../lib/tasks';
-import type { Profile, TableName, Tables, Task, TaskRow } from '../lib/types';
+import type { Perm, Profile, Role, TableName, Tables, Task, TaskRow } from '../lib/types';
 import { useToast } from '../components/Toast';
 
 type DB = { [K in TableName]: Tables[K][] };
@@ -10,7 +10,7 @@ type DB = { [K in TableName]: Tables[K][] };
 const TABLES: TableName[] = [
   'profiles', 'tags', 'tasks', 'task_assignees', 'task_tags', 'subtasks', 'task_blockers',
   'meetings', 'meeting_actions', 'meeting_tasks', 'attachments', 'checklist_items',
-  'checklist_checks', 'notifications', 'routines', 'routine_runs', 'processes',
+  'checklist_checks', 'notifications', 'routines', 'routine_runs', 'processes', 'role_permissions',
 ];
 
 const KEYS: Record<TableName, string[]> = {
@@ -19,7 +19,16 @@ const KEYS: Record<TableName, string[]> = {
   meetings: ['id'], meeting_actions: ['id'], meeting_tasks: ['meeting_id', 'task_id'], attachments: ['id'],
   checklist_items: ['id'], checklist_checks: ['item_id', 'day'], notifications: ['id'],
   routines: ['id'], routine_runs: ['routine_id', 'day'], processes: ['id'],
+  role_permissions: ['role', 'perm'],
 };
+
+const NOT_ALLOWED = 'Your access level doesn’t allow this. Ask an admin if you need it.';
+/** Turn database permission errors into plain words. */
+const friendly = (e: { code?: string; message: string }) =>
+  e.code === '42501' && !/only allows/.test(e.message) ? NOT_ALLOWED
+    : /row-level security/i.test(e.message) ? NOT_ALLOWED : e.message;
+// Tables where some rows are hidden from you on purpose, so "0 rows changed" isn't a permission problem.
+const PRIVATE_ROWS = new Set<TableName>(['notifications', 'profiles']);
 
 const emptyDB = (): DB => Object.fromEntries(TABLES.map((t) => [t, []])) as unknown as DB;
 
@@ -68,6 +77,15 @@ interface DataCtx {
   update: <K extends TableName>(table: K, match: Partial<Tables[K]>, patch: Partial<Tables[K]>) => Promise<void>;
   remove: <K extends TableName>(table: K, match: Partial<Tables[K]>) => Promise<void>;
   reload: (table?: TableName) => Promise<void>;
+  /** May I do this? Admins always may; others follow the permissions table on the People page. */
+  can: (perm: Perm) => boolean;
+}
+
+/** Same defaults as upgrade-6.sql, used until an admin has saved a choice. */
+export function defaultAllowed(role: Role, perm: Perm): boolean {
+  if (role === 'admin' || role === 'user') return true;
+  if (role === 'basic') return perm !== 'process_edit' && perm !== 'tags_manage';
+  return perm === 'export';
 }
 
 const Ctx = createContext<DataCtx | null>(null);
@@ -151,7 +169,7 @@ export function DataProvider({ session, children }: { session: Session; children
 
   const insert = useCallback(async <K extends TableName>(table: K, row: Partial<Tables[K]> | Partial<Tables[K]>[]) => {
     const { data, error } = await supabase.from(table).insert(row as never).select();
-    if (error) { toast.error(error.message); throw error; }
+    if (error) { toast.error(friendly(error)); throw error; }
     apply(table, (l) => upsertRows(table, l, data as Row[]));
     return data as Tables[K][];
   }, [apply, toast]);
@@ -162,7 +180,8 @@ export function DataProvider({ session, children }: { session: Session; children
     let q = supabase.from(table).update(patch as never);
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v as string);
     const { data, error } = await q.select();
-    if (error) { toast.error(error.message); await reload(table); return; }
+    if (error) { toast.error(friendly(error)); await reload(table); return; }
+    if (!data?.length && !PRIVATE_ROWS.has(table)) { toast.error(NOT_ALLOWED); await reload(table); return; }
     apply(table, (l) => upsertRows(table, l, data as Row[]));
   }, [apply, reload, toast]);
 
@@ -170,8 +189,9 @@ export function DataProvider({ session, children }: { session: Session; children
     apply(table, (l) => removeRows(l, match as Row));
     let q = supabase.from(table).delete();
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v as string);
-    const { error } = await q;
-    if (error) { toast.error(error.message); await reload(table); }
+    const { data, error } = await q.select();
+    if (error) { toast.error(friendly(error)); await reload(table); return; }
+    if (!data?.length && !PRIVATE_ROWS.has(table)) { toast.error(NOT_ALLOWED); await reload(table); }
   }, [apply, reload, toast]);
 
   // Join tasks with their related rows
@@ -209,8 +229,16 @@ export function DataProvider({ session, children }: { session: Session; children
   const personById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const me = personById.get(meId) ?? null;
 
+  const permRows = db.role_permissions;
+  const can = useCallback((perm: Perm) => {
+    const role = me?.role ?? 'user';
+    if (role === 'admin') return true;
+    const row = permRows.find((r) => r.role === role && r.perm === perm);
+    return row ? row.allowed : defaultAllowed(role, perm);
+  }, [me?.role, permRows]);
+
   const value: DataCtx = {
-    ready, db, me, meId, tasks, taskById, people, personById, online, setViewing, insert, update, remove, reload,
+    ready, db, me, meId, tasks, taskById, people, personById, online, setViewing, insert, update, remove, reload, can,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

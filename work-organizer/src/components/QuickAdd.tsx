@@ -16,7 +16,7 @@ export function QuickAdd() {
 
 function QuickAddModal() {
   const { quickAdd: defaults, closeQuickAdd } = useUi();
-  const { people, meId, db, personById, insert } = useData();
+  const { people, meId, db, personById, insert, can } = useData();
   const { createTask } = useActions();
   const { open } = useOpenTask();
   const toast = useToast();
@@ -58,6 +58,15 @@ function QuickAddModal() {
       setBusy(false);
     }
   };
+
+  if (!can('task_create')) return (
+    <div className="modal-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) closeQuickAdd(); }}>
+      <div className="modal" role="dialog" aria-label="New task" style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span className="grow">Your access level can’t create tasks. Ask an admin if you need it.</span>
+        <button className="btn" autoFocus onClick={closeQuickAdd}>OK</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="modal-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) closeQuickAdd(); }}>

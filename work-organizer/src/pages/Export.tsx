@@ -507,6 +507,8 @@ function MeetingsExport() {
 
 export function ExportPage() {
   const [params, setParams] = useSearchParams();
+  const { can } = useData();
+  if (!can('export')) return <div className="page"><div className="empty">Your access level can’t export. Ask an admin if you need it.</div></div>;
   const kind = (KINDS.some((k) => k.id === params.get('what')) ? params.get('what') : 'tasks') as Kind;
   const set = (k: Kind) => setParams({ what: k }, { replace: true });
   return (

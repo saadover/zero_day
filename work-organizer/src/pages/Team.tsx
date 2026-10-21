@@ -4,10 +4,10 @@ import { IconCopy, IconDownload, IconPlus, IconTrash } from '../components/Icons
 import { useToast } from '../components/Toast';
 import { timeAgo } from '../lib/dates';
 import { callApi, supabase } from '../lib/supabase';
-import type { Role, TagColor } from '../lib/types';
-import { ROLE_INFO } from '../lib/types';
+import type { Perm, Role, TagColor } from '../lib/types';
+import { PERMS, ROLE_INFO, ROLES } from '../lib/types';
 import { TAG_COLORS } from '../lib/types';
-import { useData } from '../store/data';
+import { defaultAllowed, useData } from '../store/data';
 
 const STORAGE_LIMIT = 1024 * 1024 * 1024; // free plan: ~1 GB
 
@@ -78,7 +78,8 @@ function AddMember() {
 interface TagRow { key: string; id?: string; name: string; color: TagColor }
 
 function Tags() {
-  const { db, update, remove, insert } = useData();
+  const { db, update, remove, insert, can } = useData();
+  const manage = can('tags_manage');
   const toast = useToast();
   const saved: TagRow[] = db.tags.map((t) => ({ key: t.id, id: t.id, name: t.name, color: t.color }));
   const [rows, setRows] = useState<TagRow[] | null>(null);
@@ -109,9 +110,9 @@ function Tags() {
   };
 
   return (
-    <div className="card-box">
+    <fieldset className="card-box lock" disabled={!manage}>
       <h2>Tags</h2>
-      <p className="muted" style={{ fontSize: 12.5 }}>Shared by the whole team. Rename, recolour or remove, then Save.</p>
+      <p className="muted" style={{ fontSize: 12.5 }}>Shared by the whole team. {manage ? 'Rename, recolour or remove, then Save.' : 'Your access level can’t change tags.'}</p>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {r.map((t) => (
           <div className="chk" key={t.key}>
@@ -137,7 +138,7 @@ function Tags() {
         <button className="btn" disabled={!dirty || busy} onClick={() => setRows(null)}>Cancel</button>
         <button className="btn primary" disabled={!dirty || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -182,6 +183,108 @@ function StorageAndExport() {
         <button className="btn" onClick={exportCsv}><IconDownload size={14} /> Tasks as CSV (Excel)</button>
         <button className="btn" onClick={exportJson}><IconDownload size={14} /> Everything as JSON</button>
       </div>
+    </div>
+  );
+}
+
+type Editable = Exclude<Role, 'admin'>;
+const EDITABLE: Editable[] = ['user', 'basic', 'visitor'];
+const key = (r: Editable, p: Perm) => `${r}:${p}`;
+
+/** What each access level may do. Admins can always do everything. */
+function Permissions({ isAdmin }: { isAdmin: boolean }) {
+  const { db, people, reload } = useData();
+  const toast = useToast();
+  const saved = (r: Editable, p: Perm) => db.role_permissions.find((x) => x.role === r && x.perm === p)?.allowed ?? defaultAllowed(r, p);
+  const [draft, setDraft] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const value = (r: Editable, p: Perm) => draft[key(r, p)] ?? saved(r, p);
+  const changes = Object.entries(draft).filter(([k, v]) => { const [r, p] = k.split(':') as [Editable, Perm]; return saved(r, p) !== v; });
+  const count = (r: Role) => people.filter((p) => (p.role ?? 'user') === r).length;
+  const missingTable = isAdmin && db.role_permissions.length === 0;
+
+  const toggle = (r: Editable, p: Perm) => setDraft((d) => ({ ...d, [key(r, p)]: !value(r, p) }));
+  const setColumn = (r: Editable, on: boolean) => setDraft((d) => {
+    const n = { ...d };
+    PERMS.forEach((g) => g.items.forEach((it) => { n[key(r, it.id)] = on; }));
+    return n;
+  });
+  const save = async () => {
+    setBusy(true);
+    try {
+      const rows = changes.map(([k, allowed]) => { const [role, perm] = k.split(':'); return { role, perm, allowed }; });
+      const { error } = await supabase.from('role_permissions').upsert(rows);
+      if (error) throw error;
+      await reload('role_permissions');
+      setDraft({});
+      toast.show('Permissions saved — they apply right away');
+    } catch (e) {
+      toast.error(/role_permissions/.test((e as Error).message) ? 'Run upgrade-6.sql in Supabase first.' : (e as Error).message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card-box perm-box">
+      <div className="row-gap" style={{ alignItems: 'baseline' }}>
+        <h2 style={{ margin: 0 }}>What each access level can do</h2>
+        <span className="muted" style={{ fontSize: 12.5 }}>Everyone can see everything; these control changes.{isAdmin ? ' Tick or untick, then Save.' : ' Only an admin can change this.'}</span>
+      </div>
+      {missingTable && <p className="notice" style={{ margin: 0 }}>Showing the defaults. To change them, run <b>upgrade-6.sql</b> in Supabase first.</p>}
+      <div className="scroll-x">
+        <table className="tbl perm-tbl">
+          <thead>
+            <tr>
+              <th>Permission</th>
+              {ROLES.map((r) => (
+                <th key={r} title={ROLE_INFO[r].hint}>
+                  {ROLE_INFO[r].label}<span className="perm-count">{count(r)} {count(r) === 1 ? 'person' : 'people'}</span>
+                  {isAdmin && r !== 'admin' && (
+                    <span className="perm-all">
+                      <button className="linkish" onClick={() => setColumn(r as Editable, true)}>all</button>·
+                      <button className="linkish" onClick={() => setColumn(r as Editable, false)}>none</button>
+                    </span>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PERMS.map((g) => [
+              <tr key={g.group} className="perm-group"><td colSpan={ROLES.length + 1}>{g.group}</td></tr>,
+              ...g.items.map((it) => (
+                <tr key={it.id}>
+                  <td>{it.label}{it.hint && <span className="perm-hint">{it.hint}</span>}</td>
+                  <td className="perm-cell"><input type="checkbox" checked disabled aria-label={`Admin: ${it.label}`} title="Admins can always do everything" /></td>
+                  {EDITABLE.map((r) => {
+                    const changed = draft[key(r, it.id)] !== undefined && draft[key(r, it.id)] !== saved(r, it.id);
+                    return (
+                      <td key={r} className={`perm-cell ${changed ? 'changed' : ''}`}>
+                        <input type="checkbox" checked={value(r, it.id)} disabled={!isAdmin} onChange={() => toggle(r, it.id)}
+                          aria-label={`${ROLE_INFO[r].label}: ${it.label}`} />
+                      </td>
+                    );
+                  })}
+                </tr>
+              )),
+            ])}
+            <tr className="perm-group"><td colSpan={ROLES.length + 1}>People</td></tr>
+            <tr>
+              <td>Add & remove people, change access and permissions</td>
+              <td className="perm-cell"><input type="checkbox" checked disabled aria-label="Admin: manage people" /></td>
+              {EDITABLE.map((r) => <td key={r} className="perm-cell"><input type="checkbox" checked={false} disabled aria-label={`${ROLE_INFO[r].label}: manage people`} title="Admins only" /></td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {isAdmin && changes.length > 0 && (
+        <div className="save-bar" style={{ position: 'static', margin: 0 }}>
+          <span className="muted" style={{ fontSize: 12.5 }}>{changes.length} unsaved change{changes.length === 1 ? '' : 's'}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn" disabled={busy} onClick={() => setDraft({})}>Cancel</button>
+            <button className="btn primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -238,10 +341,7 @@ export function TeamPage() {
           </table>
         </div>
         {isAdmin ? <AddMember /> : <p className="muted" style={{ fontSize: 12.5 }}>Only an admin can add people or change access.</p>}
-        <div className="card-box" style={{ gap: 6 }}>
-          <h2>Access levels</h2>
-          {(Object.keys(ROLE_INFO) as Role[]).map((r) => <span key={r} style={{ fontSize: 13 }}><b style={{ fontWeight: 500 }}>{ROLE_INFO[r].label}</b> — <span className="muted">{ROLE_INFO[r].hint}</span></span>)}
-        </div>
+        <Permissions isAdmin={isAdmin} />
         <div className="grid-2" style={{ alignItems: 'start' }}>
           <Tags />
           <StorageAndExport />

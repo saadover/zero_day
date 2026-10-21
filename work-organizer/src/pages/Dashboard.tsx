@@ -25,7 +25,7 @@ function Section({ title, viewId, count, red, children }: { title: string; viewI
 }
 
 export function Dashboard() {
-  const { tasks, me, meId, db } = useData();
+  const { tasks, me, meId, db, can } = useData();
   const { openQuickAdd } = useUi();
   const v = (id: string) => { const view = viewById(id); return runView(tasks, view, viewFilters(view), meId); };
 
@@ -50,7 +50,7 @@ export function Dashboard() {
           <h1 style={{ fontSize: 24 }}>{greeting()}, {firstName(me)}</h1>
         </div>
         <div className="actions">
-          <button className="btn primary" onClick={() => openQuickAdd()}><IconPlus size={14} /> New task <span className="kbd">N</span></button>
+          {can('task_create') && <button className="btn primary" onClick={() => openQuickAdd()}><IconPlus size={14} /> New task <span className="kbd">N</span></button>}
         </div>
       </header>
 

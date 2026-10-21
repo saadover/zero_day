@@ -10,7 +10,8 @@ import { useData } from '../store/data';
 
 /** Today's state of one reminder, with the pick-up / done buttons. */
 export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) {
-  const { db, meId, personById, reload } = useData();
+  const { db, meId, personById, reload, can } = useData();
+  const canDo = can('routine_do');
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const run = runOf(db.routine_runs, r.id);
@@ -39,7 +40,7 @@ export function RoutineToday({ r, compact }: { r: Routine; compact?: boolean }) 
         </span>
       </span>
       {claimedBy && !doneBy && <Avatar person={claimedBy} />}
-      {doneBy ? (
+      {!canDo ? null : doneBy ? (
         <button className="btn ghost sm" disabled={busy} onClick={() => act(() => releaseRun(r.id, day))}>Undo</button>
       ) : r.scope === 'team' && !claimedBy ? (
         <button className="btn sm" disabled={busy} onClick={claim}>I'm on it</button>
@@ -112,7 +113,8 @@ function Editor({ initial, onClose }: { initial: Draft; onClose: () => void }) {
 }
 
 export function RoutinesPage() {
-  const { db, meId, personById, update, remove } = useData();
+  const { db, meId, personById, update, remove, can } = useData();
+  const manage = can('routine_manage');
   const [editing, setEditing] = useState<Draft | null>(null);
   const mine = visibleTo(db.routines, meId).sort((a, b) => a.at_time.localeCompare(b.at_time));
   const todays = mine.filter((r) => happensOn(r, today())).sort((a, b) => atToday(a) - atToday(b));
@@ -123,7 +125,7 @@ export function RoutinesPage() {
         <h1>Reminders</h1>
         <span className="sub">Repeating alarms — yours and the team’s</span>
         <div className="actions">
-          <button className="btn primary" onClick={() => setEditing(blank)}><IconPlus size={14} /> New reminder</button>
+          {manage && <button className="btn primary" onClick={() => setEditing(blank)}><IconPlus size={14} /> New reminder</button>}
         </div>
       </div>
 
@@ -151,9 +153,11 @@ export function RoutinesPage() {
                   {!r.active && ' · paused'}
                 </span>
               </span>
+              {manage && <>
               <button className="btn ghost sm" onClick={() => setEditing({ id: r.id, title: r.title, at_time: hhmm(r.at_time), days: r.days, scope: r.scope, notes: r.notes })}>Edit</button>
               <button className="btn ghost sm" onClick={() => update('routines', { id: r.id }, { active: !r.active })}>{r.active ? 'Pause' : 'Resume'}</button>
               <button className="btn ghost sm icon" aria-label="Delete reminder" onClick={() => { if (confirm(`Delete “${r.title}”?`)) remove('routines', { id: r.id }); }}><IconTrash size={14} /></button>
+              </>}
             </div>
           ))}
           {mine.length === 0 && (

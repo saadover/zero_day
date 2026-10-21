@@ -5,12 +5,43 @@ export const CATEGORIES = ['Admin', 'Reporting', 'Partner', 'Meeting', 'Learning
 export const TAG_COLORS = ['gray', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'] as const;
 export const PERSON_COLORS = ['#2F5FD0', '#0F766E', '#9A3412', '#7C3AED', '#BE185D', '#4D7C0F', '#0369A1', '#A16207'];
 
-export type Role = 'admin' | 'user' | 'basic';
+export type Role = 'admin' | 'user' | 'basic' | 'visitor';
+export const ROLES: Role[] = ['admin', 'user', 'basic', 'visitor'];
 export const ROLE_INFO: Record<Role, { label: string; hint: string }> = {
-  admin: { label: 'Admin', hint: 'Everything, including adding people and changing roles' },
-  user: { label: 'User', hint: 'Everything except managing people' },
-  basic: { label: 'Basic', hint: 'Tasks, checklist, meetings and reminders; can only view processes' },
+  admin: { label: 'Admin', hint: 'Can do everything, including managing people and permissions' },
+  user: { label: 'User', hint: 'Full team member' },
+  basic: { label: 'Basic', hint: 'Day-to-day work; processes are view-only by default' },
+  visitor: { label: 'Visitor', hint: 'Sees everything, changes nothing by default' },
 };
+
+export type Perm =
+  | 'task_create' | 'task_edit' | 'task_status' | 'task_delete' | 'files_upload'
+  | 'checklist_tick' | 'checklist_manage' | 'meeting_edit' | 'routine_do' | 'routine_manage'
+  | 'process_edit' | 'tags_manage' | 'export';
+export const PERMS: { group: string; items: { id: Perm; label: string; hint?: string }[] }[] = [
+  { group: 'Tasks', items: [
+    { id: 'task_create', label: 'Create tasks' },
+    { id: 'task_edit', label: 'Edit tasks', hint: 'Title, dates, priority, people, tags, sub-tasks, notes' },
+    { id: 'task_status', label: 'Change status & tick sub-tasks', hint: 'Move tasks along without editing them' },
+    { id: 'task_delete', label: 'Delete tasks' },
+    { id: 'files_upload', label: 'Upload & remove files', hint: 'PDFs and images on tasks and meetings' },
+  ] },
+  { group: 'Daily checklist', items: [
+    { id: 'checklist_tick', label: 'Tick items' },
+    { id: 'checklist_manage', label: 'Add, rename & remove items' },
+  ] },
+  { group: 'Meetings', items: [{ id: 'meeting_edit', label: 'Create, edit & delete meetings' }] },
+  { group: 'Reminders', items: [
+    { id: 'routine_do', label: "Pick up reminders (“I'm on it”) & mark done" },
+    { id: 'routine_manage', label: 'Create, edit & delete repeating reminders' },
+  ] },
+  { group: 'Processes', items: [{ id: 'process_edit', label: 'Create, edit & delete processes' }] },
+  { group: 'Other', items: [
+    { id: 'tags_manage', label: 'Rename, recolour & delete tags' },
+    { id: 'export', label: 'Export (PDF, Excel, images)' },
+  ] },
+];
+export interface RolePermission { role: Exclude<Role, 'admin'>; perm: Perm; allowed: boolean }
 
 export type Status = (typeof STATUSES)[number];
 export type Priority = (typeof PRIORITIES)[number];
@@ -211,6 +242,7 @@ export interface Tables {
   routines: Routine;
   routine_runs: RoutineRun;
   processes: Process;
+  role_permissions: RolePermission;
 }
 
 export type TableName = keyof Tables;

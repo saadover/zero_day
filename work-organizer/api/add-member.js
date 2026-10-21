@@ -4,11 +4,11 @@ const nameFromEmail = (e) => e.split('@')[0].replace(/\d+/g, '').split(/[._-]+/)
 
 const COLORS = ['#2F5FD0', '#0F766E', '#9A3412', '#7C3AED', '#BE185D', '#4D7C0F', '#0369A1', '#A16207'];
 
-// An admin creates a login for a new teammate, with a role: admin, user or basic.
+// An admin creates a login for a new teammate, with a role: admin, user, basic or visitor.
 export default handler(async (req) => {
   const { db, profile: me } = await requireUser(req);
   if (me.role && me.role !== 'admin') throw new HttpError(403, 'Only an admin can add people.');
-  const role = ['admin', 'user', 'basic'].includes(req.body?.role) ? req.body.role : 'user';
+  const role = ['admin', 'user', 'basic', 'visitor'].includes(req.body?.role) ? req.body.role : 'user';
   const email = String(req.body?.email || '').trim().toLowerCase();
   const fullName = String(req.body?.full_name || '').trim();
   const password = String(req.body?.password || '');

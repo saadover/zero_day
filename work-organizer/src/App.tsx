@@ -76,7 +76,7 @@ function useLocalAlarms() {
  * already picked up (or finished) stays quiet; the toast offers "I'm on it".
  */
 function useRoutineAlarms() {
-  const { db, me, meId, personById, reload } = useData();
+  const { db, me, meId, personById, reload, can } = useData();
   const toast = useToast();
   const latest = useRef(db.routine_runs);
   latest.current = db.routine_runs;
@@ -94,7 +94,7 @@ function useRoutineAlarms() {
       if (run?.done_by || (run?.claimed_by && run.claimed_by !== meId)) return; // someone has it
       const title = r.scope === 'team' ? `Team reminder: ${r.title}` : `Reminder: ${r.title}`;
       showLocal(title, r.scope === 'team' ? 'Click “I’m on it” in the app so nobody does it twice.' : r.notes, '/reminders', key);
-      toast.show(title, r.scope === 'team'
+      toast.show(title, r.scope === 'team' && can('routine_do')
         ? { label: 'I’m on it', run: async () => {
           const other = await claimRun(r.id, day, meId);
           await reload('routine_runs');

@@ -28,9 +28,12 @@ function useDay(day: string) {
 }
 
 function useToggle() {
-  const { insert, remove } = useData();
-  return (item: ChecklistItem, day: string, on: boolean) =>
-    on ? remove('checklist_checks', { item_id: item.id, day }) : insert('checklist_checks', { item_id: item.id, day });
+  const { insert, remove, can } = useData();
+  const toast = useToast();
+  return (item: ChecklistItem, day: string, on: boolean) => {
+    if (!can('checklist_tick')) { toast.error('Your access level can’t tick the checklist.'); return; }
+    return on ? remove('checklist_checks', { item_id: item.id, day }) : insert('checklist_checks', { item_id: item.id, day });
+  };
 }
 
 function Box({ on, label, onClick, small }: { on: boolean; label: string; onClick: () => void; small?: boolean }) {
@@ -43,7 +46,7 @@ function Box({ on, label, onClick, small }: { on: boolean; label: string; onClic
 }
 
 function Row({ item, day, check, showBy }: { item: ChecklistItem; day: string; check?: ChecklistCheck; showBy: boolean }) {
-  const { personById, update } = useData();
+  const { personById, update, can } = useData();
   const toggle = useToggle();
   const on = !!check;
   return (
@@ -52,7 +55,7 @@ function Row({ item, day, check, showBy }: { item: ChecklistItem; day: string; c
       <span className={`lbl ${on ? 'on' : ''}`} onClick={() => toggle(item, day, on)} style={{ cursor: 'pointer' }}>{item.label}</span>
       {item.only_day && <span className="tag" style={{ color: 'var(--tag-blue)', background: 'var(--tag-blue-bg)' }}>this day only</span>}
       {showBy && check && <span className="by">{firstName(personById.get(check.user_id ?? ''))} · {fmtTime(check.checked_at)}</span>}
-      {item.only_day && (
+      {item.only_day && can('checklist_manage') && (
         <button className="btn ghost sm icon" style={{ marginLeft: showBy && check ? 0 : 'auto' }} aria-label="Remove item"
           onClick={() => { if (confirm(`Remove “${item.label}”?`)) update('checklist_items', { id: item.id }, { active: false }); }}><IconX size={12} /></button>
       )}
@@ -82,6 +85,7 @@ function AddOneDay({ day, scope }: { day: string; scope: 'team' | 'personal' }) 
 /** One day's checklist; used on the dashboard (compact) and the checklist page. */
 export function ChecklistBlock({ compact, day = today() }: { compact?: boolean; day?: string }) {
   const { team, mine, checks, done, total } = useDay(day);
+  const manage = useData().can('checklist_manage');
   return (
     <section>
       <div className="sec-h">
@@ -93,11 +97,11 @@ export function ChecklistBlock({ compact, day = today() }: { compact?: boolean; 
       <div className="side-label" style={{ padding: '12px 4px 2px' }}>Team</div>
       {team.map((i) => <Row key={i.id} item={i} day={day} check={checks.get(i.id)} showBy />)}
       {team.length === 0 && <div className="muted" style={{ padding: '8px 4px', fontSize: 12.5 }}>No team items.</div>}
-      {!compact && <AddOneDay day={day} scope="team" />}
+      {!compact && manage && <AddOneDay day={day} scope="team" />}
       <div className="side-label" style={{ padding: '14px 4px 2px' }}>Mine <span style={{ textTransform: 'none', letterSpacing: 0 }}>· only you see these</span></div>
       {mine.map((i) => <Row key={i.id} item={i} day={day} check={checks.get(i.id)} showBy={false} />)}
       {mine.length === 0 && <div className="muted" style={{ padding: '8px 4px', fontSize: 12.5 }}>No personal items{compact ? '.' : ' — add every-day items with “Edit list”, or one for this day below.'}</div>}
-      {!compact && <AddOneDay day={day} scope="personal" />}
+      {!compact && manage && <AddOneDay day={day} scope="personal" />}
     </section>
   );
 }
@@ -230,6 +234,7 @@ function Editor({ scope, onDone }: { scope: 'team' | 'personal'; onDone?: () => 
 export function ChecklistPage() {
   const [day, setDay] = useState(today());
   const [mode, setMode] = useState<'day' | 'week' | 'edit'>('day');
+  const manage = useData().can('checklist_manage');
   const weekStart = startOfWeek(day);
   const step = (n: number) => setDay(addDays(day, mode === 'week' ? n * 7 : n));
 
@@ -252,7 +257,7 @@ export function ChecklistPage() {
           <div className="seg">
             <button className={mode === 'day' ? 'on' : ''} onClick={() => setMode('day')}>Day</button>
             <button className={mode === 'week' ? 'on' : ''} onClick={() => setMode('week')}>Week</button>
-            <button className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}>Edit list</button>
+            {manage && <button className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}>Edit list</button>}
           </div>
         </div>
       </div>

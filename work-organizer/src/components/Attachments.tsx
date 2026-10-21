@@ -55,8 +55,10 @@ function Lightbox({ src, name, onClose, onDownload }: { src: string; name: strin
  * Attachment list for a task or meeting. Works on a draft: new files and removals
  * only happen when the parent saves.
  */
-export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, onRemoveNew }: {
+export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, onRemoveNew, readOnly }: {
   saved: Attachment[]; newFiles: File[]; removed: string[];
+  /** Can look at and download files, but not add or remove them. */
+  readOnly?: boolean;
   onAdd: (files: File[]) => void; onRemoveSaved: (id: string) => void; onRemoveNew: (index: number) => void;
 }) {
   const { personById } = useData();
@@ -74,7 +76,7 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
   const previews = usePreviews(newFiles);
 
   const add = async (files: File[]) => {
-    if (!files.length) return;
+    if (readOnly || !files.length) return;
     setBusy(true);
     const ready = await prepareFiles(files, (m) => toast.error(m));
     setBusy(false);
@@ -106,10 +108,10 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
       onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); add([...e.dataTransfer.files]); } }}>
       <div className="section-h">
         Files
-        <span className="muted" style={{ fontSize: 11.5 }}>PDFs & images · paste a screenshot with Ctrl+V</span>
-        <button className="btn ghost sm r" disabled={busy} onClick={() => inputRef.current?.click()}>
+        {!readOnly && <span className="muted" style={{ fontSize: 11.5 }}>PDFs & images · paste a screenshot with Ctrl+V</span>}
+        {!readOnly && <button className="btn ghost sm r" disabled={busy} onClick={() => inputRef.current?.click()}>
           <IconPaperclip size={13} /> {busy ? 'Compressing…' : 'Attach'}
-        </button>
+        </button>}
         <input ref={inputRef} type="file" accept="application/pdf,.pdf,image/*" multiple hidden
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; add(f); }} />
       </div>
@@ -123,7 +125,7 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
               </button>
               <figcaption>
                 <span className="ellipsis" title={a.name}>{formatBytes(a.size)} · {firstName(personById.get(a.uploaded_by ?? ''))}</span>
-                <button className="btn ghost icon sm" aria-label="Remove image" onClick={() => onRemoveSaved(a.id)}><IconTrash size={12} /></button>
+                {!readOnly && <button className="btn ghost icon sm" aria-label="Remove image" onClick={() => onRemoveSaved(a.id)}><IconTrash size={12} /></button>}
               </figcaption>
             </figure>
           ))}
@@ -134,7 +136,7 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
               </button>
               <figcaption>
                 <span className="ellipsis">{formatBytes(f.size)} · not saved</span>
-                <button className="btn ghost icon sm" aria-label="Remove image" onClick={() => onRemoveNew(i)}><IconX size={12} /></button>
+                {!readOnly && <button className="btn ghost icon sm" aria-label="Remove image" onClick={() => onRemoveNew(i)}><IconX size={12} /></button>}
               </figcaption>
             </figure>
           ))}
@@ -149,14 +151,14 @@ export function Attachments({ saved, newFiles, removed, onAdd, onRemoveSaved, on
             <span className="muted" style={{ fontSize: 11.5 }}>{formatBytes(a.size)} · {firstName(personById.get(a.uploaded_by ?? ''))} · {timeAgo(a.created_at)}</span>
           </button>
           <button className="btn ghost icon sm" aria-label="Download" onClick={() => act.openAttachment(a.path, true).catch((e) => toast.error(e.message))}><IconDownload size={14} /></button>
-          <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => onRemoveSaved(a.id)}><IconTrash size={14} /></button>
+          {!readOnly && <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => onRemoveSaved(a.id)}><IconTrash size={14} /></button>}
         </div>
       ))}
       {newFiles.map((f, i) => !isImage(f) && (
         <div className="file" key={`p${i}`} style={{ borderStyle: 'dashed' }}>
           <span className="fi">PDF</span>
           <span className="grow ellipsis">{f.name} <span className="muted" style={{ fontSize: 11.5 }}>· {formatBytes(f.size)} · uploads when you save</span></span>
-          <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => onRemoveNew(i)}><IconX size={14} /></button>
+          {!readOnly && <button className="btn ghost icon sm" aria-label="Remove file" onClick={() => onRemoveNew(i)}><IconX size={14} /></button>}
         </div>
       ))}
       {shown.length === 0 && newFiles.length === 0 && (

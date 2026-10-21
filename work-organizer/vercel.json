@@ -1,7 +1,25 @@
 {
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "functions": {
-    "api/reminders.js": { "maxDuration": 60 }
+    "api/reminders.js": {
+      "maxDuration": 60
+    }
   },
-  "crons": [{ "path": "/api/reminders", "schedule": "0 6 * * *" }]
+  "crons": [
+    {
+      "path": "/api/reminders",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "master": true,
+      "claude/*": false
+    }
+  }
 }

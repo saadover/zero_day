@@ -456,3 +456,26 @@ begin
   insert into public.subtasks (task_id, title, done, position) values
     (t1, 'List the topics', true, 1), (t1, 'Book the room', false, 2), (t1, 'Send the invite', false, 3);
 end $$;
+
+-- ───────────────────────────── API access (explicit grants) ─────────────────────────────
+-- From Oct 30 2026 Supabase no longer grants API access to new tables automatically.
+-- Logged-in users get access (row level security above still decides what they see);
+-- the anonymous key gets nothing. app_settings is server-only.
+do $$
+declare t text;
+begin
+  foreach t in array array['profiles','tags','tasks','task_assignees','task_tags','subtasks','task_blockers',
+    'meetings','meeting_actions','meeting_tasks','attachments','checklist_items','checklist_checks',
+    'notifications','push_subscriptions','reminder_log','routines','routine_runs']
+  loop
+    if to_regclass('public.' || t) is not null then
+      execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+      execute format('grant select, insert, update, delete on public.%I to service_role', t);
+    end if;
+  end loop;
+  if to_regclass('public.app_settings') is not null then
+    execute 'grant select, insert, update, delete on public.app_settings to service_role';
+  end if;
+end $$;
+grant usage on schema public to authenticated, service_role;
+grant usage, select on all sequences in schema public to authenticated, service_role;

@@ -1,38 +1,49 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { firstName } from '../components/Atoms';
-import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from '../components/Icons';
+import { IconBell, IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from '../components/Icons';
 import { useToast } from '../components/Toast';
 import { addDays, fmtDay, fmtTime, startOfWeek, today } from '../lib/dates';
-import type { ChecklistCheck, ChecklistItem } from '../lib/types';
+import { dayEntries, type DayEntry } from '../lib/daylist';
+import { finishRun, releaseRun } from '../lib/routines';
 import { useData } from '../store/data';
+import { useOpenTask } from '../store/ui';
 
-/** Items that apply to a day: every-day items plus that day's one-off items. */
-function itemsFor(items: ChecklistItem[], meId: string, day: string) {
-  return items
-    .filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId) && (!i.only_day || i.only_day === day))
-    .sort((a, b) => (a.only_day ? 1 : 0) - (b.only_day ? 1 : 0) || a.position - b.position);
+/** Everything on one day's list (own items, reminders, dated tasks). */
+export function useDayEntries(day: string) {
+  const { db, tasks, meId } = useData();
+  return dayEntries(db, tasks, meId, day);
 }
 
 function useDay(day: string) {
-  const { db, meId } = useData();
-  const items = itemsFor(db.checklist_items, meId, day);
-  const checks = new Map(db.checklist_checks.filter((c) => c.day === day).map((c) => [c.item_id, c]));
+  const entries = useDayEntries(day);
   return {
-    team: items.filter((i) => i.scope === 'team'),
-    mine: items.filter((i) => i.scope === 'personal'),
-    checks,
-    done: items.filter((i) => checks.has(i.id)).length,
-    total: items.length,
+    team: entries.filter((e) => e.scope === 'team'),
+    mine: entries.filter((e) => e.scope === 'personal'),
+    done: entries.filter((e) => e.done).length,
+    total: entries.length,
   };
 }
 
+/** Tick / untick anything on the list; reminders and tasks update where they live. */
 function useToggle() {
-  const { insert, remove, can } = useData();
+  const { insert, remove, update, can, meId, reload } = useData();
   const toast = useToast();
-  return (item: ChecklistItem, day: string, on: boolean) => {
-    if (!can('checklist_tick')) { toast.error('Your access level can’t tick the checklist.'); return; }
-    return on ? remove('checklist_checks', { item_id: item.id, day }) : insert('checklist_checks', { item_id: item.id, day });
+  return async (e: DayEntry, day: string) => {
+    if (e.kind === 'item') {
+      if (!can('checklist_tick')) { toast.error('Your access level can’t tick the checklist.'); return; }
+      return e.done ? remove('checklist_checks', { item_id: e.item!.id, day }) : insert('checklist_checks', { item_id: e.item!.id, day });
+    }
+    if (e.kind === 'routine') {
+      if (!can('routine_do')) { toast.error('Your access level can’t mark reminders done.'); return; }
+      const res = e.done ? await releaseRun(e.routine!.id, day) : await finishRun(e.routine!.id, day, meId);
+      if (res.error) toast.error(res.error.message);
+      await reload('routine_runs');
+      return;
+    }
+    if (!can('task_status') && !can('task_edit')) { toast.error('Your access level can’t change tasks.'); return; }
+    await update('tasks', { id: e.task!.id }, { status: e.done ? 'To do' : 'Done' });
+    if (!e.done) toast.show(`“${e.task!.title}” marked Done`);
   };
 }
 
@@ -45,18 +56,28 @@ function Box({ on, label, onClick, small }: { on: boolean; label: string; onClic
   );
 }
 
-function Row({ item, day, check, showBy }: { item: ChecklistItem; day: string; check?: ChecklistCheck; showBy: boolean }) {
+function Row({ e, day, showBy }: { e: DayEntry; day: string; showBy: boolean }) {
   const { personById, update, can } = useData();
+  const { open } = useOpenTask();
   const toggle = useToggle();
-  const on = !!check;
+  const item = e.item;
   return (
     <div className="chk">
-      <Box on={on} label={item.label} onClick={() => toggle(item, day, on)} />
-      <span className={`lbl ${on ? 'on' : ''}`} onClick={() => toggle(item, day, on)} style={{ cursor: 'pointer' }}>{item.label}</span>
-      {item.only_day && <span className="tag" style={{ color: 'var(--tag-blue)', background: 'var(--tag-blue-bg)' }}>this day only</span>}
-      {showBy && check && <span className="by">{firstName(personById.get(check.user_id ?? ''))} · {fmtTime(check.checked_at)}</span>}
-      {item.only_day && can('checklist_manage') && (
-        <button className="btn ghost sm icon" style={{ marginLeft: showBy && check ? 0 : 'auto' }} aria-label="Remove item"
+      <Box on={e.done} label={e.label} onClick={() => toggle(e, day)} />
+      <span className={`lbl ${e.done ? 'on' : ''}`} onClick={() => (e.kind === 'task' ? open(e.task!.id) : toggle(e, day))} style={{ cursor: 'pointer' }}
+        title={e.kind === 'task' ? 'Open the task' : undefined}>{e.label}</span>
+      {e.kind === 'routine' && <span className="tag chk-src rt"><IconBell size={10} /> {e.time} reminder</span>}
+      {e.kind === 'task' && (
+        <span className={`tag chk-src tk ${e.why === 'deadline' && !e.done ? 'due' : ''}`}>
+          #{e.task!.number} · {e.why === 'deadline' ? 'due' : 'planned'}{e.time ? ` ${e.time}` : ''}
+        </span>
+      )}
+      {item?.only_day && <span className="tag" style={{ color: 'var(--tag-blue)', background: 'var(--tag-blue-bg)' }}>this day only</span>}
+      {showBy && e.by && (e.done || e.kind === 'routine') && (
+        <span className="by">{e.kind === 'routine' && !e.done ? `${firstName(personById.get(e.by))} is on it` : firstName(personById.get(e.by))}{e.at ? ` · ${fmtTime(e.at)}` : ''}</span>
+      )}
+      {item?.only_day && can('checklist_manage') && (
+        <button className="btn ghost sm icon" style={{ marginLeft: showBy && e.done ? 0 : 'auto' }} aria-label="Remove item"
           onClick={() => { if (confirm(`Remove “${item.label}”?`)) update('checklist_items', { id: item.id }, { active: false }); }}><IconX size={12} /></button>
       )}
     </div>
@@ -84,7 +105,7 @@ function AddOneDay({ day, scope }: { day: string; scope: 'team' | 'personal' }) 
 
 /** One day's checklist; used on the dashboard (compact) and the checklist page. */
 export function ChecklistBlock({ compact, day = today() }: { compact?: boolean; day?: string }) {
-  const { team, mine, checks, done, total } = useDay(day);
+  const { team, mine, done, total } = useDay(day);
   const manage = useData().can('checklist_manage');
   return (
     <section>
@@ -95,40 +116,47 @@ export function ChecklistBlock({ compact, day = today() }: { compact?: boolean; 
       </div>
       <div className="progress" style={{ margin: '12px 4px 4px' }}><div style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></div>
       <div className="side-label" style={{ padding: '12px 4px 2px' }}>Team</div>
-      {team.map((i) => <Row key={i.id} item={i} day={day} check={checks.get(i.id)} showBy />)}
+      {team.map((e) => <Row key={e.key} e={e} day={day} showBy />)}
       {team.length === 0 && <div className="muted" style={{ padding: '8px 4px', fontSize: 12.5 }}>No team items.</div>}
       {!compact && manage && <AddOneDay day={day} scope="team" />}
       <div className="side-label" style={{ padding: '14px 4px 2px' }}>Mine <span style={{ textTransform: 'none', letterSpacing: 0 }}>· only you see these</span></div>
-      {mine.map((i) => <Row key={i.id} item={i} day={day} check={checks.get(i.id)} showBy={false} />)}
+      {mine.map((e) => <Row key={e.key} e={e} day={day} showBy={false} />)}
       {mine.length === 0 && <div className="muted" style={{ padding: '8px 4px', fontSize: 12.5 }}>No personal items{compact ? '.' : ' — add every-day items with “Edit list”, or one for this day below.'}</div>}
       {!compact && manage && <AddOneDay day={day} scope="personal" />}
+      {!compact && <p className="muted" style={{ fontSize: 12, margin: '10px 4px 0' }}>Reminders and tasks planned or due this day are added automatically — ticking them here marks them done everywhere.</p>}
     </section>
   );
 }
 
 function WeekGrid({ start }: { start: string }) {
-  const { db, meId, personById } = useData();
+  const { db, tasks, meId, personById } = useData();
   const toggle = useToggle();
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  const all = db.checklist_items.filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId)
-    && (!i.only_day || days.includes(i.only_day)));
-  const checks = new Map(db.checklist_checks.filter((c) => days.includes(c.day)).map((c) => [`${c.item_id}|${c.day}`, c]));
-  const section = (scope: 'team' | 'personal') => all.filter((i) => i.scope === scope)
-    .sort((a, b) => (a.only_day ?? '') .localeCompare(b.only_day ?? '') || a.position - b.position);
-  const dayDone = (d: string) => itemsFor(db.checklist_items, meId, d).filter((i) => checks.has(`${i.id}|${d}`)).length;
-  const dayTotal = (d: string) => itemsFor(db.checklist_items, meId, d).length;
+  const perDay = new Map(days.map((d) => [d, dayEntries(db, tasks, meId, d)]));
+  // One row per thing, in first-seen order; a cell where it doesn't apply stays empty.
+  const rowsOf = (scope: 'team' | 'personal') => {
+    const seen = new Map<string, DayEntry>();
+    for (const d of days) for (const e of perDay.get(d)!) if (e.scope === scope && !seen.has(e.key)) seen.set(e.key, e);
+    return [...seen.values()];
+  };
+  const cell = (key: string, d: string) => perDay.get(d)!.find((e) => e.key === key);
 
-  const rows = (scope: 'team' | 'personal') => section(scope).map((i) => (
-    <tr key={i.id}>
-      <td style={{ minWidth: 220 }}>{i.label}{i.only_day && <span className="muted" style={{ fontSize: 11.5 }}> · {fmtDay(i.only_day).split(' ')[0]} only</span>}</td>
+  const rows = (scope: 'team' | 'personal') => rowsOf(scope).map((r) => (
+    <tr key={r.key}>
+      <td style={{ minWidth: 220 }}>
+        {r.label}
+        {r.kind === 'routine' && <span className="muted" style={{ fontSize: 11.5 }}> · ⏰ {r.time}</span>}
+        {r.kind === 'task' && <span className="muted" style={{ fontSize: 11.5 }}> · task #{r.task!.number}</span>}
+        {r.item?.only_day && <span className="muted" style={{ fontSize: 11.5 }}> · {fmtDay(r.item.only_day).split(' ')[0]} only</span>}
+      </td>
       {days.map((d) => {
-        if (i.only_day && i.only_day !== d) return <td key={d} className={d === today() ? 'now' : ''} />;
-        const c = checks.get(`${i.id}|${d}`);
+        const e = cell(r.key, d);
+        if (!e) return <td key={d} className={d === today() ? 'now' : ''} />;
         return (
           <td key={d} className={d === today() ? 'now' : ''} style={{ textAlign: 'center' }}
-            title={c ? `${firstName(personById.get(c.user_id ?? ''))} · ${fmtTime(c.checked_at)}` : ''}>
+            title={e.done && e.by ? `${firstName(personById.get(e.by))}${e.at ? ` · ${fmtTime(e.at)}` : ''}` : ''}>
             <span className="chk" style={{ border: 0, justifyContent: 'center', minHeight: 0 }}>
-              <Box small on={!!c} label={`${i.label} on ${fmtDay(d)}`} onClick={() => toggle(i, d, !!c)} />
+              <Box small on={e.done} label={`${e.label} on ${fmtDay(d)}`} onClick={() => toggle(e, d)} />
             </span>
           </td>
         );
@@ -145,7 +173,7 @@ function WeekGrid({ start }: { start: string }) {
             {days.map((d) => (
               <th key={d} className={d === today() ? 'now' : ''} style={{ textAlign: 'center' }}>
                 {fmtDay(d).split(' ').slice(0, 2).join(' ')}<br />
-                <span className="mono" style={{ textTransform: 'none', letterSpacing: 0 }}>{dayDone(d)}/{dayTotal(d)}</span>
+                <span className="mono" style={{ textTransform: 'none', letterSpacing: 0 }}>{perDay.get(d)!.filter((e) => e.done).length}/{perDay.get(d)!.length}</span>
               </th>
             ))}
           </tr>

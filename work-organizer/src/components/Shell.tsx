@@ -4,6 +4,7 @@ import { today } from '../lib/dates';
 import { runView, viewById, viewFilters, VIEWS } from '../lib/tasks';
 import { happensOn, runOf, visibleTo } from '../lib/routines';
 import { supabase } from '../lib/supabase';
+import { dayEntries } from '../lib/daylist';
 import { useData } from '../store/data';
 import { useOpenTask, useUi } from '../store/ui';
 import { Avatar, Avatars } from './Atoms';
@@ -105,8 +106,8 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [tasks, meId]);
 
   const t = today();
-  const activeItems = db.checklist_items.filter((i) => i.active && (i.scope === 'team' || i.owner_id === meId) && (!i.only_day || i.only_day === t));
-  const checked = db.checklist_checks.filter((c) => c.day === t && activeItems.some((i) => i.id === c.item_id)).length;
+  const activeItems = dayEntries(db, tasks, meId, t);
+  const checked = activeItems.filter((e) => e.done).length;
   const others = online.map((o) => o.userId).filter((id) => id !== meId);
   const todaysRoutines = visibleTo(db.routines, meId).filter((r) => happensOn(r, t)
     && !runOf(db.routine_runs, r.id, t)?.done_by).length;

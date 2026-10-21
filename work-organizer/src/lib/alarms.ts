@@ -1,4 +1,4 @@
-import { hhmm } from './dates';
+import { fmtDay, hhmm } from './dates';
 import type { Task } from './types';
 
 /** Choices offered on a task, in minutes before the time (0 = at the time). */
@@ -48,7 +48,7 @@ export function taskAlarms(t: Task): Alarm[] {
     const when = Date.parse(t.remind_at);
     out.push({
       key: `remind:${t.id}:${t.remind_at}`, at: when, target: when, moment: `remind:${t.id}:${t.remind_at}`, minutes: 0, taskId: t.id,
-      title: `Reminder: ${t.title}`, body: t.deadline ? `Deadline ${t.deadline}${t.deadline_time ? ` ${hhmm(t.deadline_time)}` : ''}` : '',
+      title: `Reminder: ${t.title}`, body: t.deadline ? `Deadline ${fmtDay(t.deadline)}${t.deadline_time ? ` ${hhmm(t.deadline_time)}` : ''}` : '',
     });
   }
   return out;

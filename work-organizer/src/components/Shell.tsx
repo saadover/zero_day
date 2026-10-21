@@ -9,7 +9,7 @@ import { useOpenTask, useUi } from '../store/ui';
 import { Avatar, Avatars } from './Atoms';
 import { CommandPalette } from './CommandPalette';
 import {
-  IconBell, IconBoard, IconDownload, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
+  IconBell, IconBoard, IconClock, IconDownload, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
   IconSearch, IconSettings, IconUsers,
 } from './Icons';
 import { Popover, useAnchor } from './Popover';
@@ -160,6 +160,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
         <div className="side-foot">
           <Nav to="/people" icon={<IconUsers />} label="People" count={db.profiles.length} />
+          {me?.role === 'admin' && <Nav to="/history" icon={<IconClock />} label="History" />}
           <Nav to="/settings" icon={<IconSettings />} label="Settings" />
           <div className="nav" style={{ cursor: 'default' }}>
             <Avatar person={me ?? undefined} />

@@ -35,5 +35,10 @@ export default handler(async (req) => {
     role,
     color: COLORS[(count ?? 0) % COLORS.length],
   });
+  // History: the database sees this as the server, so record which admin did it.
+  await db.from('activity_log').insert({
+    actor: me.id, actor_name: me.full_name, kind: 'profiles', action: 'insert',
+    record_id: data.user.id, title: fullName || nameFromEmail(email), details: role,
+  }).then(() => undefined, () => undefined);
   return { id: data.user.id };
 });

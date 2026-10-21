@@ -3,7 +3,7 @@ import { Avatar, formatBytes } from '../components/Atoms';
 import { IconCopy, IconDownload, IconPlus, IconTrash } from '../components/Icons';
 import { useToast } from '../components/Toast';
 import { timeAgo } from '../lib/dates';
-import { callApi, supabase } from '../lib/supabase';
+import { callApi, logEvent, supabase } from '../lib/supabase';
 import type { Perm, Role, TagColor } from '../lib/types';
 import { PERMS, ROLE_INFO, ROLES } from '../lib/types';
 import { TAG_COLORS } from '../lib/types';
@@ -151,6 +151,7 @@ function StorageAndExport() {
   const pct = used === null ? 0 : Math.min(100, (used / STORAGE_LIMIT) * 100);
 
   const download = (name: string, content: string, type: string) => {
+    logEvent('export', name, 'backup');
     const url = URL.createObjectURL(new Blob([content], { type }));
     const a = document.createElement('a'); a.href = url; a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

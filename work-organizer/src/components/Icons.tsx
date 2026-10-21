@@ -34,6 +34,7 @@ export const IconChevronRight = (p: P) => <svg {...base(p)}><path d="M6 3.5 10.5
 export const IconChevronDown = (p: P) => <svg {...base(p)}><path d="M4 6.5 8 10.5l4-4" /></svg>;
 export const IconArrowRight = (p: P) => <svg {...base(p)}><path d="M3 8h10M9 4l4 4-4 4" /></svg>;
 export const IconLock = (p: P) => <svg {...base(p)}><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>;
+export const IconClock = (p: P) => <svg {...base(p)}><circle cx="8" cy="8" r="5.75" /><path d="M8 4.75V8l2.25 1.5" /></svg>;
 export const IconDownload = (p: P) => <svg {...base(p)}><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" /></svg>;
 export const IconLogout = (p: P) => <svg {...base(p)}><path d="M6 2.5H3.5v11H6M10 5l3 3-3 3M13 8H6.5" /></svg>;
 export const IconSun = (p: P) => <svg {...base(p)}><circle cx="8" cy="8" r="2.8" /><path d="M8 1.5v1.3M8 13.2v1.3M14.5 8h-1.3M2.8 8H1.5M12.6 3.4l-.9.9M4.3 11.7l-.9.9M12.6 12.6l-.9-.9M4.3 4.3l-.9-.9" /></svg>;

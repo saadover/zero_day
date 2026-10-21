@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { logEvent, supabase } from '../lib/supabase';
 import { PasswordForm } from './Settings';
 
 const Mark = () => (
@@ -19,6 +19,7 @@ export function Login() {
     setErr(''); setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
+    if (!error) logEvent('login', 'Logged in');
     if (error) setErr(error.message === 'Invalid login credentials' ? 'Wrong email or password.' : error.message);
   };
 

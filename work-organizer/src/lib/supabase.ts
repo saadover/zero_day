@@ -24,3 +24,8 @@ export async function callApi<T = unknown>(path: string, body: unknown): Promise
   if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
   return json as T;
 }
+
+/** Record something the database can't see by itself (exports, logins) in the admin History. Never blocks the user. */
+export function logEvent(kind: 'export' | 'login', title: string, details?: string) {
+  supabase.rpc('log_event', { kind, title, details: details ?? null }).then(() => undefined, () => undefined);
+}

@@ -3,9 +3,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { OutlineDiagram } from '../components/OutlineDiagram';
 import { parseOutline, type ONode } from './outline';
+import { logEvent } from './supabase';
 import type { Process } from './types';
 
 export function download(name: string, blob: Blob) {
+  logEvent('export', name, `${Math.max(1, Math.round(blob.size / 1024))} KB`);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();

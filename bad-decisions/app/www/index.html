@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BadDecisions</title>
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Ask -->
+<section class="screen" id="home">
+  <div class="bar">
+    <span class="logo">Bad<span>Decisions</span></span>
+    <div class="icons">
+      <button class="icon-btn" type="button" id="toHistory" aria-label="My decisions">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="dot" id="historyDot" hidden></span>
+      </button>
+      <button class="icon-btn" type="button" id="toSettings" aria-label="Settings and your answers">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <h1>Can't decide?<br><em>Make a bad decision.</em></h1>
+
+  <div class="chips cats" id="cats" role="group" aria-label="Kind of decision">
+    <button class="chip" type="button" data-cat="life">Big life</button>
+    <button class="chip" type="button" data-cat="food">Food</button>
+    <button class="chip" type="button" data-cat="outfit">Outfit</button>
+    <button class="chip" type="button" data-cat="text">Text them?</button>
+    <button class="chip" type="button" data-cat="buy">Buy it?</button>
+  </div>
+
+  <label class="field">What are you deciding? (optional)
+    <input type="text" id="question" maxlength="200" placeholder="e.g. Which job should I take?" autocomplete="off"></label>
+  <div class="options">
+    <label class="field option">Option 1
+      <input type="text" id="optA" maxlength="200" placeholder="e.g. Stay in my current job" autocomplete="off"></label>
+    <div class="vs" aria-hidden="true">VS</div>
+    <label class="field option">Option 2
+      <input type="text" id="optB" maxlength="200" placeholder="e.g. Move abroad for the new offer" autocomplete="off"></label>
+  </div>
+
+  <button class="link-btn" type="button" id="addNotes">+ Add details (optional)</button>
+  <label class="field" id="notesField" hidden>Anything else it should know?
+    <textarea id="notes" maxlength="600" placeholder="e.g. My parents live near my current job, and the new offer pays 30% more."></textarea></label>
+
+  <div class="known" id="known" hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--good)"><path d="M5 12l5 5 9-10"/></svg>
+    <span id="knownText"></span>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="dock">
+    <button class="primary" type="button" id="decideBtn" disabled>Decide for me
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  </div>
+</section>
+
+<!-- About you: one screen per question -->
+<section class="screen" id="step">
+  <div class="bar">
+    <button class="back" type="button" data-back>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+    <div class="progress" aria-hidden="true"><i id="stepBar"></i></div>
+  </div>
+
+  <div data-q="age" hidden>
+    <h1 class="small">How old are you?</h1>
+    <p class="lead">What's right at 18 isn't always right at 45.</p>
+    <label class="field">Age
+      <input type="number" id="age" inputmode="numeric" min="13" max="120" placeholder="e.g. 27"></label>
+  </div>
+  <div data-q="religion" hidden>
+    <h1 class="small">What's your religion?</h1>
+    <p class="lead">So the pick respects what you believe.</p>
+    <div class="chips big" data-single="religion">
+      <button class="chip" type="button">Islam</button>
+      <button class="chip" type="button">Christianity</button>
+      <button class="chip" type="button">Judaism</button>
+      <button class="chip" type="button">Hinduism</button>
+      <button class="chip" type="button">Buddhism</button>
+      <button class="chip" type="button">Sikhism</button>
+      <button class="chip" type="button">Spiritual</button>
+      <button class="chip" type="button">Other</button>
+      <button class="chip" type="button">Not religious</button>
+      <button class="chip" type="button">Prefer not to say</button>
+    </div>
+  </div>
+  <div data-q="priorities" hidden>
+    <h1 class="small">What matters most to you?</h1>
+    <p class="lead">Pick up to three.</p>
+    <div class="chips big" data-multi="priorities" data-max="3">
+      <button class="chip" type="button">Family</button>
+      <button class="chip" type="button">Money</button>
+      <button class="chip" type="button">Career</button>
+      <button class="chip" type="button">Health</button>
+      <button class="chip" type="button">Happiness</button>
+      <button class="chip" type="button">Faith</button>
+      <button class="chip" type="button">Freedom</button>
+      <button class="chip" type="button">Security</button>
+      <button class="chip" type="button">Adventure</button>
+      <button class="chip" type="button">Learning</button>
+      <button class="chip" type="button">Friends</button>
+      <button class="chip" type="button">Love</button>
+    </div>
+  </div>
+  <div data-q="budget" hidden>
+    <h1 class="small">How's your money situation?</h1>
+    <p class="lead">Be honest. It stays on your phone.</p>
+    <div class="chips stack" data-single="budget">
+      <button class="chip" type="button" data-value="Tight">Tight<small>Every bit counts right now</small></button>
+      <button class="chip" type="button" data-value="Okay">Okay<small>I can handle some costs</small></button>
+      <button class="chip" type="button" data-value="Comfortable">Comfortable<small>Money isn't the main worry</small></button>
+    </div>
+  </div>
+  <div data-q="risk" hidden>
+    <h1 class="small">Safe or bold?</h1>
+    <p class="lead">When life gives you a choice, you usually…</p>
+    <div class="chips stack" data-single="risk">
+      <button class="chip" type="button" data-value="Plays it safe">Play it safe<small>I prefer what I know</small></button>
+      <button class="chip" type="button" data-value="Balanced">Somewhere in between<small>A little risk is fine</small></button>
+      <button class="chip" type="button" data-value="Takes chances">Take chances<small>Big risks, big rewards</small></button>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <button class="primary" type="button" id="stepNext">Next</button>
+  <button class="text-btn" type="button" id="stepSkip">Skip</button>
+</section>
+
+<!-- Thinking -->
+<section class="screen" id="thinking">
+  <div class="thinking">
+    <div class="coin" aria-hidden="true">?</div>
+    <p id="thinkingText" role="status">Weighing your options…</p>
+  </div>
+</section>
+
+<!-- Result -->
+<section class="screen" id="result">
+  <div class="bar">
+    <button class="back" type="button" data-back>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>New decision</button>
+  </div>
+  <div id="resultBody"></div>
+  <button class="text-btn" type="button" id="retry">Ask again</button>
+  <div class="spacer"></div>
+  <div class="dock" id="resultActions">
+    <button class="primary" type="button" id="shareStory">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 14v6h14v-6"/></svg>Share to story</button>
+    <button class="secondary" type="button" id="askFriends">Ask my friends</button>
+  </div>
+</section>
+
+<!-- History -->
+<section class="screen" id="history">
+  <div class="bar">
+    <button class="back" type="button" data-back>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+  </div>
+  <h1 class="small">My decisions</h1>
+  <div class="stats">
+    <div class="stat"><b id="statCount">0</b><span>decided</span></div>
+    <div class="stat good"><b id="statGood">0</b><span>good calls</span></div>
+    <div class="stat hot"><b id="statStreak">0</b><span>day streak</span></div>
+  </div>
+  <div class="followup" id="followup" hidden>
+    <span class="when" id="fuWhen"></span>
+    <span class="q" id="fuQ"></span>
+    <div class="row">
+      <button class="yes" type="button" id="fuYes">Yes, good call</button>
+      <button class="no" type="button" id="fuNo">Not really</button>
+    </div>
+  </div>
+  <h2>Recent</h2>
+  <div class="list" id="list"></div>
+</section>
+
+<!-- Settings -->
+<section class="screen" id="settings">
+  <div class="bar">
+    <button class="back" type="button" data-back>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+  </div>
+  <h1 class="small">About you</h1>
+  <div class="rows" id="profileRows"></div>
+  <div class="rows">
+    <button type="button" id="editProfile">Edit my answers <small>›</small></button>
+    <button type="button" id="shareApp">Share BadDecisions <small>›</small></button>
+    <a id="privacyLink" href="#">Privacy policy <small>›</small></a>
+    <button type="button" class="danger" id="wipe">Delete my data</button>
+  </div>
+  <p class="foot">Your answers and decisions are saved only on this phone.<br>BadDecisions 1.0</p>
+</section>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="config.js"></script>
+<script src="share-card.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

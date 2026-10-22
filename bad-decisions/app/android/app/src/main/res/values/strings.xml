@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BadDecisions</string>
+    <string name="title_activity_main">BadDecisions</string>
+    <string name="package_name">com.baddecisions.app</string>
+    <string name="custom_url_scheme">com.baddecisions.app</string>
+</resources>

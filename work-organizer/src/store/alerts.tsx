@@ -42,7 +42,7 @@ export const useAlerts = () => {
   return c;
 };
 
-const NOTE_KINDS: Record<string, 'good' | 'info'> = { task_done: 'good', task_started: 'good', task_reopened: 'info', assigned: 'info' };
+const NOTE_KINDS: Record<string, 'good' | 'info'> = { task_done: 'good', task_started: 'good', task_reopened: 'info', task_stopped: 'info', task_waiting: 'info', assigned: 'info' };
 
 const SNOOZES: [string, number][] = [['15 min', 15], ['30 min', 30], ['1 hour', 60], ['1 day', 1440]];
 

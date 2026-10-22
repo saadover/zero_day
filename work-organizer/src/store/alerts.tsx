@@ -15,6 +15,8 @@ export interface AppAlert {
   /** note = a message from a teammate's action (assigned you, started / finished your task) */
   kind: 'task' | 'routine' | 'note';
   notifId?: string;
+  /** assigned / task_started / task_done / task_reopened */
+  noteKind?: string;
   tone?: 'good' | 'info';
   title: string;
   body: string;
@@ -111,7 +113,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     if (!fresh.length) return;
     setAlerts((cur) => {
       const add = fresh.filter((n) => !cur.some((a) => a.key === `n:${n.id}`)).map((n): AppAlert => ({
-        key: `n:${n.id}`, kind: 'note', notifId: n.id, tone: NOTE_KINDS[n.kind], title: n.title, body: n.body,
+        key: `n:${n.id}`, kind: 'note', notifId: n.id, noteKind: n.kind, tone: NOTE_KINDS[n.kind], title: n.title, body: n.body,
         taskId: n.task_id ?? undefined, firedAt: Date.parse(n.created_at),
       }));
       return add.length ? [...cur, ...add] : cur;
@@ -177,6 +179,8 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
   const canStatus = can('task_status') || can('task_edit');
   // A task that isn't started yet gets "Start task"; one already in progress just "Got it".
   // Only a task that hasn't started yet can be started — a finished one never jumps back.
+  const assignedToMe = a.kind === 'note' && (a.noteKind ?? (/assigned you/.test(a.title) ? 'assigned' : '')) === 'assigned'
+    && !!task && task.assignees.includes(meId) && canStatus && (task.status === 'To do' || task.status === 'Waiting on someone');
   const canStart = a.kind !== 'routine' && canStatus && !!task && (task.status === 'To do' || task.status === 'Waiting on someone');
   const { open } = useOpenTask();
   const toast = useToast();
@@ -241,11 +245,11 @@ function AlertCard({ a, done, snooze }: { a: AppAlert; done: (key: string) => vo
           </div>
         ) : a.kind === 'note' ? (
           <div className="alert-actions">
-            {a.tone === 'info' && canStart
+            {/* Only "assigned you a task" is yours to act on; the rest just keep you informed. */}
+            {assignedToMe
               ? <button className="btn primary sm" disabled={busy} onClick={async () => { await startTask(); await closeNote(); }}>Start task</button>
               : <button className="btn primary sm" onClick={closeNote}>OK</button>}
-            {a.taskId && <button className="btn ghost sm" onClick={() => { open(a.taskId!); closeNote(); }}>Open</button>}
-            {a.tone === 'info' && canStart && <button className="btn ghost sm" onClick={closeNote}>Later</button>}
+            {assignedToMe && <button className="btn ghost sm" onClick={closeNote}>Later</button>}
           </div>
         ) : (
           <div className="alert-actions">

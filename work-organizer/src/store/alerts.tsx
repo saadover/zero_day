@@ -63,7 +63,7 @@ function chime() {
 }
 
 export function AlertsProvider({ children }: { children: ReactNode }) {
-  const { meId, me, tasks, db, ready } = useData();
+  const { meId, me, tasks, db, ready, update } = useData();
   const storeKey = `wo-alerts:${meId}`;
   const [alerts, setAlerts] = useState<AppAlert[]>(() => {
     try { return JSON.parse(localStorage.getItem(storeKey) || '[]'); } catch { return []; }
@@ -104,6 +104,23 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       return next.length === cur.length ? cur : next;
     });
   }, [ready, tasks, db.routines, db.routine_runs, db.notifications, meId]);
+
+  // One card per task: "assigned you a task" steps aside (marked read) once that task has its own
+  // alarm showing, or once it's started — no point in two cards for the same thing.
+  const settled = useRef(new Set<string>());
+  useEffect(() => {
+    if (!ready) return;
+    const alarmed = new Set(alerts.filter((a) => a.kind === 'task').map((a) => a.taskId));
+    for (const n of db.notifications) {
+      if (n.user_id !== meId || n.read_at || n.kind !== 'assigned' || !n.task_id || settled.current.has(n.id)) continue;
+      const t = tasks.find((x) => x.id === n.task_id);
+      const started = !!t && t.status !== 'To do' && t.status !== 'Waiting on someone';
+      if (alarmed.has(n.task_id) || started) {
+        settled.current.add(n.id);
+        update('notifications', { id: n.id }, { read_at: new Date().toISOString() });
+      }
+    }
+  }, [ready, alerts, db.notifications, tasks, meId, update]);
 
   // Teammates' actions that concern you: assigned you a task, started / finished a task you created.
   useEffect(() => {

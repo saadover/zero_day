@@ -118,7 +118,26 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
   dirtyRef.current = dirty;
   const [saving, setSaving] = useState(false);
 
-  const edit = (fn: (x: Draft) => Draft) => setDraft((cur) => fn(cur ?? saved));
+  // The task as it was when you started editing. Fields you haven't touched follow changes made
+  // elsewhere (an alert's "Start task", the board, a teammate) instead of overwriting them on Save.
+  const base = useRef<Draft | null>(null);
+  const edit = (fn: (x: Draft) => Draft) => setDraft((cur) => {
+    if (!cur) base.current = saved;
+    return fn(cur ?? saved);
+  });
+  useEffect(() => {
+    const b = base.current;
+    if (!b || b === saved) return;
+    base.current = saved;
+    setDraft((cur) => {
+      if (!cur) return cur;
+      const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+      const fields = { ...cur.fields } as Record<string, unknown>;
+      for (const f of FIELDS) if (same(cur.fields[f], b.fields[f])) fields[f] = saved.fields[f];
+      const keep = <K extends 'assignees' | 'tags' | 'blockedBy' | 'subtasks'>(k: K) => (same(cur[k], b[k]) ? saved[k] : cur[k]);
+      return { ...cur, fields: fields as Fields, assignees: keep('assignees'), tags: keep('tags'), blockedBy: keep('blockedBy'), subtasks: keep('subtasks') };
+    });
+  }, [saved]);
   const setField = <K extends Field>(k: K, v: Fields[K]) => edit((x) => ({ ...x, fields: { ...x.fields, [k]: v } }));
   const toggleIn = (key: 'assignees' | 'tags' | 'blockedBy', id: string) =>
     edit((x) => ({ ...x, [key]: x[key].includes(id) ? x[key].filter((v) => v !== id) : [...x[key], id] }));
@@ -185,6 +204,7 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
         if (a) await act.deleteAttachment(a.id, a.path);
       }
       setDraft(null);
+      base.current = null;
       toast.show('Saved');
     } catch (e) {
       toast.error((e as Error).message);
@@ -193,7 +213,7 @@ function PanelBody({ task, dirtyRef, onClose }: { task: Task; dirtyRef: MutableR
     }
   };
 
-  const cancel = () => setDraft(null);
+  const cancel = () => { setDraft(null); base.current = null; };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

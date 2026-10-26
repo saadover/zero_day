@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/swap.js": { "maxDuration": 30 },
+    "api/status.js": { "maxDuration": 15 },
+    "api/image.js": { "maxDuration": 30 }
+  }
+}

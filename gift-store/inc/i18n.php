@@ -52,7 +52,7 @@ function translations(): array
         'f_gender' => ['fr' => 'C\'est pour', 'ar' => 'الهدية لـ', 'en' => 'It\'s for'],
         'f_him' => ['fr' => 'Lui', 'ar' => 'هو', 'en' => 'Him'],
         'f_her' => ['fr' => 'Elle', 'ar' => 'هي', 'en' => 'Her'],
-        'f_age' => ['fr' => 'Son âge', 'ar' => 'عمره', 'en' => 'Their age'],
+        'f_age' => ['fr' => 'Son âge', 'ar' => 'العمر', 'en' => 'Their age'],
         'f_years' => ['fr' => 'ans', 'ar' => 'سنة', 'en' => 'yrs'],
         'f_relation' => ['fr' => 'C\'est votre…', 'ar' => 'شنو كيكون ليك؟', 'en' => 'They are your…'],
         'f_budget' => ['fr' => 'Votre budget', 'ar' => 'الميزانية ديالك', 'en' => 'Your budget'],
@@ -83,10 +83,11 @@ function translations(): array
         'res_error' => ['fr' => 'Oups, réessayez dans un instant.', 'ar' => 'وقع مشكل، عاود من بعد شوية.', 'en' => 'Oops, try again in a moment.'],
         'res_local' => ['fr' => 'Suggestions basées sur vos critères', 'ar' => 'اقتراحات حسب المعايير ديالك', 'en' => 'Suggestions based on your criteria'],
 
-        'why_relation' => ['fr' => 'Idéal pour : {r}', 'ar' => 'مناسب لـ{r}', 'en' => 'Ideal for: {r}'],
+        'why_relation' => ['fr' => 'Idéal pour : {r}', 'ar' => 'هدية مناسبة: {r}', 'en' => 'Ideal for: {r}'],
         'why_budget' => ['fr' => 'Dans votre budget', 'ar' => 'فالميزانية ديالك', 'en' => 'Within budget'],
         'why_age' => ['fr' => 'Idéal à {a} ans', 'ar' => 'مناسب لعمر {a}', 'en' => 'Great at {a}'],
         'why_likes' => ['fr' => 'Aime : {x}', 'ar' => 'كيحب: {x}', 'en' => 'Into {x}'],
+        'why_likes_f' => ['fr' => 'Aime : {x}', 'ar' => 'كتحب: {x}', 'en' => 'Into {x}'],
         'why_occasion' => ['fr' => 'Parfait pour : {x}', 'ar' => 'مثالي لـ: {x}', 'en' => 'Perfect for {x}'],
 
         'add_to_cart' => ['fr' => 'Ajouter au panier', 'ar' => 'زيد للسلة', 'en' => 'Add to cart'],
@@ -120,7 +121,7 @@ function translations(): array
         'no_products' => ['fr' => 'Aucun cadeau trouvé.', 'ar' => 'ما لقينا حتى هدية.', 'en' => 'No gifts found.'],
         'results_for' => ['fr' => 'Résultats pour « {q} »', 'ar' => 'نتائج « {q} »', 'en' => 'Results for “{q}”'],
 
-        'ideal_for' => ['fr' => 'Idéal pour', 'ar' => 'مناسب لـ', 'en' => 'Ideal for'],
+        'ideal_for' => ['fr' => 'Idéal pour', 'ar' => 'مناسب لهادو', 'en' => 'Ideal for'],
         'details' => ['fr' => 'Détails', 'ar' => 'التفاصيل', 'en' => 'Details'],
         'related' => ['fr' => 'Vous aimerez aussi', 'ar' => 'غادي يعجبك حتى', 'en' => 'You may also like'],
         'cod_note' => ['fr' => 'Payez en espèces à la réception. Aucune carte nécessaire.', 'ar' => 'خلص كاش ملي توصلك الهدية. ما محتاجش بطاقة.', 'en' => 'Pay cash when it arrives. No card needed.'],

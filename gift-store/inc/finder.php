@@ -333,7 +333,7 @@ function finder_reasons(array $p, array $c): array
 {
     $r = [];
     $l = $p['_local'];
-    if ($l['likes']) $r[] = t('why_likes', ['x' => implode(', ', array_map(fn($k) => tag_label(interests(), $k), array_slice($l['likes'], 0, 2)))]);
+    if ($l['likes']) $r[] = t($c['gender'] === 'female' ? 'why_likes_f' : 'why_likes', ['x' => implode(', ', array_map(fn($k) => tag_label(interests(), $k), array_slice($l['likes'], 0, 2)))]);
     if ($l['occasions']) $r[] = t('why_occasion', ['x' => tag_label(occasions(), $l['occasions'][0])]);
     $rel = list_split($p['relations']);
     if ($rel && in_array($c['relation'], $rel, true)) $r[] = t('why_relation', ['r' => relation_label($c['relation'], $c['gender'])]);

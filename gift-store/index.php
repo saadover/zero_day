@@ -20,6 +20,10 @@ $examples = [
     'katbghi lmekyaj w l3tr, 3id miladha ghedda',
 ];
 
+// Start the rotating examples with one in the page's own language.
+if (lang() === 'ar') array_unshift($examples, $examples[3]);
+elseif (lang() === 'en') array_unshift($examples, $examples[2]);
+
 page_header('', ['active' => 'home', 'body' => 'home']);
 ?>
 <section class="hero" id="finder">

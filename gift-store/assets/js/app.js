@@ -1,4 +1,4 @@
-/* Hdiya storefront: cart, gift finder, small animations. No dependencies. */
+/* Hdiya storefront: quick-buy pop-up, gift finder, small animations. No dependencies. */
 (function () {
   "use strict";
   var S = window.STORE || { t: {} };
@@ -11,6 +11,7 @@
     get: function (k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } }
   };
+  try { localStorage.removeItem("hdiya_cart"); } catch (e) { /* old cart from the previous version */ }
   var ICON = {
     check: '<svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     plus: '<svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -27,93 +28,102 @@
     toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
   }
 
-  /* ---------- Cart ---------- */
-  var CART_KEY = "hdiya_cart";
-  var cart = store.get(CART_KEY, []);
-  if (!Array.isArray(cart)) cart = [];
+  /* ---------- Quick buy pop-up ---------- */
+  // "Acheter" opens a small form (name, phone, city) and places the order
+  // straight away: no cart, no checkout page.
+  var modal = $("#quickbuy"), scrim = $(".modal-scrim"), qbForm = $("[data-qb-form]"), qbDone = $("[data-qb-done]");
+  var qbItem = null, qbQty = 1, qbBusy = false, lastFocus = null;
+  var saved = store.get("hdiya_buyer", {}) || {};
 
-  function saveCart() { store.set(CART_KEY, cart); renderCart(); }
-  function cartCount() { return cart.reduce(function (n, l) { return n + l.qty; }, 0); }
-  function cartSubtotal() { return cart.reduce(function (n, l) { return n + l.qty * l.price; }, 0); }
-
-  function addToCart(item, qty) {
-    qty = Math.max(1, Math.min(20, qty || 1));
-    var line = cart.find(function (l) { return l.id === item.id; });
-    if (line) line.qty = Math.min(20, line.qty + qty);
-    else cart.push({ id: item.id, name: item.name, price: item.price, image: item.image, url: item.url, qty: qty });
-    saveCart();
-    $$("[data-cart-count]").forEach(function (b) { b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); });
-    toast(item.name + " · " + T.added.replace("✓", "").trim());
+  function qbTotals() {
+    var sub = qbItem.price * qbQty;
+    var fee = S.freeFrom > 0 && sub >= S.freeFrom ? 0 : S.deliveryFee;
+    $("[data-qb-qty]").textContent = qbQty;
+    $("[data-qb-price]").textContent = money(sub);
+    $("[data-qb-delivery]").textContent = fee ? money(fee) : T.free;
+    $("[data-qb-total]").textContent = money(sub + fee);
   }
-
-  function renderCart() {
-    var count = cartCount(), sub = cartSubtotal();
-    $$("[data-cart-count]").forEach(function (b) { b.textContent = count; b.hidden = !count; });
-    var list = $("[data-cart-items]");
-    if (!list) return;
-    $("[data-cart-empty]").hidden = !!count;
-    $("[data-cart-foot]").hidden = !count;
-    list.hidden = !count;
-    list.innerHTML = cart.map(function (l) {
-      return '<div class="line" data-id="' + l.id + '">' +
-        '<a href="' + esc(l.url) + '"><img src="' + esc(l.image) + '" alt="" loading="lazy"></a>' +
-        '<div><a class="line-name" href="' + esc(l.url) + '">' + esc(l.name) + '</a><div class="line-price">' + money(l.price) + '</div>' +
-        '<div class="stepper"><button type="button" data-q="-1" aria-label="-">' + ICON.minus + '</button><span>' + l.qty + '</span><button type="button" data-q="1" aria-label="+">' + ICON.plus + '</button></div></div>' +
-        '<div class="line-total">' + money(l.qty * l.price) + '<button type="button" class="line-remove" data-remove>' + esc(T.remove) + '</button></div></div>';
-    }).join("");
-    $("[data-cart-subtotal]").textContent = money(sub);
-    var meter = $("[data-free-meter]");
-    if (meter) {
-      meter.hidden = !count || !S.freeFrom;
-      var pct = S.freeFrom ? Math.min(100, sub * 100 / S.freeFrom) : 100;
-      $("i", meter).style.width = pct + "%";
-      $("p", meter).textContent = sub >= S.freeFrom ? T.freeOk : T.freeLeft.replace("{x}", money(S.freeFrom - sub));
-    }
+  function qbErr(field, msg) {
+    var el = $("[data-err=" + field + "]", qbForm), input = qbForm.elements[field];
+    el.textContent = msg || ""; el.hidden = !msg;
+    input.closest(".field").classList.toggle("bad", !!msg);
   }
-
-  var drawer = $("#cart"), scrim = $(".drawer-scrim");
-  function openCart() {
-    if (!drawer) return;
+  function openBuy(item, qty) {
+    if (!modal) return;
+    qbItem = item; qbQty = Math.max(1, Math.min(item.max || 10, qty || 1));
+    lastFocus = document.activeElement;
+    $("[data-qb-img]").src = item.image;
+    $("[data-qb-name]").textContent = item.name;
+    ["name", "phone", "city"].forEach(function (f) { qbErr(f, ""); if (saved[f] && !qbForm.elements[f].value) qbForm.elements[f].value = saved[f]; });
+    $("[data-qb-error]").hidden = true;
+    qbForm.hidden = false; qbDone.hidden = true;
+    qbTotals();
     scrim.hidden = false;
-    requestAnimationFrame(function () { scrim.classList.add("show"); drawer.classList.add("open"); });
-    drawer.setAttribute("aria-hidden", "false");
+    modal.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(function () { scrim.classList.add("show"); modal.classList.add("open"); });
     document.body.style.overflow = "hidden";
+    setTimeout(function () { (qbForm.elements.name.value ? qbForm.elements.phone.value ? qbForm.elements.city : qbForm.elements.phone : qbForm.elements.name).focus({ preventScroll: true }); }, 350);
   }
-  function closeCart() {
-    if (!drawer) return;
-    scrim.classList.remove("show");
-    drawer.classList.remove("open");
-    drawer.setAttribute("aria-hidden", "true");
+  function closeBuy() {
+    if (!modal || !modal.classList.contains("open")) return;
+    scrim.classList.remove("show"); modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
-    setTimeout(function () { scrim.hidden = true; }, 350);
+    setTimeout(function () { scrim.hidden = true; }, 300);
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   }
+  window.openBuy = openBuy;
 
   document.addEventListener("click", function (e) {
-    var t = e.target;
-    var add = t.closest("[data-add]");
-    if (add) {
-      e.preventDefault();
-      addToCart(JSON.parse(add.getAttribute("data-add")), 1);
-      add.classList.add("done");
-      add.innerHTML = ICON.check;
-      setTimeout(function () { add.classList.remove("done"); add.innerHTML = ICON.plus; }, 1400);
-      return;
-    }
-    if (t.closest("[data-cart-open]")) { e.preventDefault(); openCart(); return; }
-    if (t.closest("[data-cart-close]")) { closeCart(); return; }
-    var line = t.closest(".line");
-    if (line) {
-      var id = +line.getAttribute("data-id");
-      var l = cart.find(function (x) { return x.id === id; });
-      if (!l) return;
-      if (t.closest("[data-remove]")) cart = cart.filter(function (x) { return x.id !== id; });
-      var q = t.closest("[data-q]");
-      if (q) { l.qty += +q.getAttribute("data-q"); if (l.qty < 1) cart = cart.filter(function (x) { return x.id !== id; }); l.qty = Math.min(20, l.qty); }
-      saveCart();
-    }
+    var b = e.target.closest("[data-buy-now]");
+    if (b) { e.preventDefault(); openBuy(JSON.parse(b.getAttribute("data-buy-now")), 1); return; }
+    if (e.target.closest("[data-qb-close]")) { closeBuy(); return; }
+    var st = e.target.closest("[data-qb-step]");
+    if (st && qbItem) { qbQty = Math.max(1, Math.min(qbItem.max || 10, qbQty + +st.getAttribute("data-qb-step"))); qbTotals(); }
   });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeCart(); });
-  renderCart();
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeBuy(); });
+
+  if (qbForm) {
+    var phone = qbForm.elements.phone;
+    // Digits only, 10 at most, as people type or paste (+212 6… becomes 06…).
+    phone.addEventListener("input", function () {
+      var d = phone.value.replace(/\D/g, "");
+      if (d.indexOf("00212") === 0) d = "0" + d.slice(5);
+      else if (d.indexOf("212") === 0 && d.length > 10) d = "0" + d.slice(3);
+      if (d.length === 9 && /^[5-7]/.test(d)) d = "0" + d; // typed without the leading 0
+      phone.value = d.slice(0, 10);
+      if (phone.closest(".field").classList.contains("bad") && /^0[5-7]\d{8}$/.test(phone.value)) qbErr("phone", "");
+    });
+    qbForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (qbBusy || !qbItem) return;
+      var f = qbForm.elements, ok = true;
+      var vals = { name: f.name.value.trim(), phone: f.phone.value.trim(), city: f.city.value };
+      if (vals.name.length < 2) { qbErr("name", T.errName); ok = false; } else qbErr("name", "");
+      if (!/^0[5-7]\d{8}$/.test(vals.phone)) { qbErr("phone", T.errPhone); ok = false; } else qbErr("phone", "");
+      if (!vals.city) { qbErr("city", T.errCity); ok = false; } else qbErr("city", "");
+      if (!ok) { var bad = $(".field.bad input, .field.bad select", qbForm); if (bad) bad.focus(); return; }
+      qbBusy = true;
+      var btn = $("button[type=submit]", qbForm);
+      btn.classList.add("loading");
+      fetch(S.base + "api/order.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF": S.csrf },
+        body: JSON.stringify({ id: qbItem.id, qty: qbQty, name: vals.name, phone: vals.phone, city: vals.city, website: f.website.value })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.j.errors) { Object.keys(res.j.errors).forEach(function (k) { if (f[k]) qbErr(k, res.j.errors[k]); else { var g = $("[data-qb-error]"); g.textContent = res.j.errors[k]; g.hidden = false; } }); return; }
+          if (!res.ok) throw new Error(res.j.error || T.error);
+          saved = vals; store.set("hdiya_buyer", saved);
+          $("[data-qb-ref]").textContent = res.j.ref;
+          $("[data-qb-done-text]").textContent = res.j.message || "";
+          qbForm.hidden = true; qbDone.hidden = false;
+          $("[data-qb-close]", qbDone).focus({ preventScroll: true });
+        })
+        .catch(function (err) { var g = $("[data-qb-error]"); g.textContent = err.message || T.error; g.hidden = false; })
+        .then(function () { qbBusy = false; btn.classList.remove("loading"); });
+    });
+  }
 
   /* ---------- Header ---------- */
   var topbar = $("#topbar");
@@ -266,31 +276,37 @@
         .catch(function (e) {
           clearInterval(tick);
           thinking.hidden = true; body.hidden = false;
-          $("[data-top]", body).innerHTML = ""; $("[data-more-wrap]", body).hidden = true; $("[data-understood]", body).hidden = true;
+          $("[data-top]", body).innerHTML = ""; $("[data-more-wrap]", body).hidden = true; $("[data-close-wrap]", body).hidden = true; $("[data-close-note]", body).hidden = true; $("[data-understood]", body).hidden = true;
           var none = $("[data-none]", body); none.hidden = false; none.textContent = e.message || T.error;
         })
         .then(function () { busy = false; btn.classList.remove("loading"); });
     }
 
+    function buyBtn(p, cls) {
+      var item = { id: p.id, name: p.name, price: p.price, image: p.image };
+      return '<button class="' + cls + '" type="button" data-buy-now=\'' + esc(JSON.stringify(item)) + '\'>' + esc(T.buy) + "</button>";
+    }
+    function gapsHtml(p) {
+      return p.gaps && p.gaps.length ? '<ul class="gaps">' + p.gaps.map(function (g) { return "<li>" + esc(g) + "</li>"; }).join("") + "</ul>" : "";
+    }
     function pickHtml(p, i) {
-      var item = { id: p.id, name: p.name, price: p.price, image: p.image, url: p.url };
-      return '<article class="pick' + (i === 0 ? " first" : "") + '" style="--d:' + (i * 120) + 'ms">' +
-        (i === 0 ? '<span class="best-label">' + esc(T.best) + "</span>" : "") +
+      var first = i === 0 && !p.close;
+      return '<article class="pick' + (first ? " first" : "") + (p.close ? " is-close" : "") + '" style="--d:' + (i * 120) + 'ms">' +
+        (first ? '<span class="best-label">' + esc(T.best) + "</span>" : "") +
         '<a class="pick-media" href="' + esc(p.url) + '"><img src="' + esc(p.image) + '" alt="' + esc(p.name) + '" loading="lazy"><span class="pick-rank">N°' + (i + 1) + "</span></a>" +
         '<div class="pick-body"><span class="card-cat">' + esc(p.category) + "</span><h3><a href=\"" + esc(p.url) + '">' + esc(p.name) + "</a></h3>" +
-        '<ul class="reasons">' + p.reasons.map(function (r) { return "<li>" + ICON.check + "<span>" + esc(r) + "</span></li>"; }).join("") + "</ul>" +
+        (p.close ? gapsHtml(p) : '<ul class="reasons">' + p.reasons.map(function (r) { return "<li>" + ICON.check + "<span>" + esc(r) + "</span></li>"; }).join("") + "</ul>") +
         '<div class="pick-foot"><div class="price"><strong>' + esc(p.price_label) + "</strong>" + (p.compare_label ? " <s>" + esc(p.compare_label) + "</s>" : "") + "</div>" +
-        (window.__src === "jev" ? '<span class="match"><span class="match-ring" style="--p:' + p.match + '"></span>' + p.match + "%</span>" : "") +
-        '<button class="add-btn" type="button" aria-label="' + esc(T.add) + "\" data-add='" + esc(JSON.stringify(item)) + "'>" + ICON.plus + "</button></div></div></article>";
+        (window.__src === "jev" && !p.close ? '<span class="match"><span class="match-ring" style="--p:' + p.match + '"></span>' + p.match + "%</span>" : "") +
+        "</div>" + buyBtn(p, "buy-btn") + "</div></article>";
     }
     function cardHtml(p) {
-      var item = { id: p.id, name: p.name, price: p.price, image: p.image, url: p.url };
       var off = p.compare && p.compare > p.price ? Math.round(100 - p.price * 100 / p.compare) : 0;
-      return '<article class="card reveal"><a class="card-media" href="' + esc(p.url) + '"><img src="' + esc(p.image) + '" alt="' + esc(p.name) + '" loading="lazy">' +
+      return '<article class="card reveal' + (p.close ? " is-close" : "") + '"><a class="card-media" href="' + esc(p.url) + '"><img src="' + esc(p.image) + '" alt="' + esc(p.name) + '" loading="lazy">' +
         (off ? '<span class="pill sale">-' + off + "%</span>" : "") + "</a>" +
-        '<div class="card-body"><span class="card-cat">' + esc(p.category) + "</span><h3><a href=\"" + esc(p.url) + '">' + esc(p.name) + "</a></h3>" +
-        '<div class="card-foot"><div class="price"><strong>' + esc(p.price_label) + "</strong>" + (p.compare_label ? " <s>" + esc(p.compare_label) + "</s>" : "") + "</div>" +
-        '<button class="add-btn" type="button" aria-label="' + esc(T.add) + "\" data-add='" + esc(JSON.stringify(item)) + "'>" + ICON.plus + "</button></div></div></article>";
+        '<div class="card-body"><span class="card-cat">' + esc(p.category) + "</span><h3><a href=\"" + esc(p.url) + '">' + esc(p.name) + "</a></h3>" + gapsHtml(p) +
+        '<div class="card-foot"><div class="price"><strong>' + esc(p.price_label) + "</strong>" + (p.compare_label ? " <s>" + esc(p.compare_label) + "</s>" : "") + "</div></div>" +
+        buyBtn(p, "buy-btn") + "</div></article>";
     }
 
     function show(data) {
@@ -310,9 +326,15 @@
       var more = $("[data-more]", body);
       more.innerHTML = data.more.map(cardHtml).join("");
       $("[data-more-wrap]", body).hidden = !data.more.length;
-      $("[data-none]", body).hidden = !!data.top.length;
-      $("[data-none]", body).textContent = noneText;
-      observe(more);
+      var close = $("[data-close]", body);
+      close.innerHTML = (data.close || []).map(cardHtml).join("");
+      $("[data-close-wrap]", body).hidden = !(data.close || []).length;
+      var none = $("[data-none]", body);
+      none.hidden = !!data.top.length;
+      none.textContent = noneText;
+      // Nothing matched every rule: say so, then show the closest gifts.
+      $("[data-close-note]", body).hidden = !(data.exact === 0 && data.top.length);
+      observe(more); observe(close);
     }
   }
 
@@ -329,14 +351,10 @@
   if (buy) {
     var item = JSON.parse(buy.getAttribute("data-buy")), qty = $("[data-qty]", buy);
     $$("[data-step]", buy).forEach(function (b) {
-      b.addEventListener("click", function () { qty.value = Math.max(1, Math.min(20, (+qty.value || 1) + +b.getAttribute("data-step"))); });
+      b.addEventListener("click", function () { qty.value = Math.max(1, Math.min(item.max || 10, (+qty.value || 1) + +b.getAttribute("data-step"))); });
     });
-    $$("[data-buy-add]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        addToCart(item, +qty.value || 1);
-        var label = b.querySelector("span");
-        if (label) { label.textContent = T.added; setTimeout(function () { label.textContent = T.add; }, 1500); }
-      });
+    $$("[data-buy-main]").forEach(function (b) {
+      b.addEventListener("click", function () { openBuy(item, +qty.value || 1); });
     });
     var sticky = $("[data-sticky-buy]");
     if (sticky && io) {
@@ -353,38 +371,4 @@
     }, { passive: true });
   }
 
-  /* ---------- Checkout ---------- */
-  var co = $("[data-checkout]");
-  if (co) {
-    var field = $("[data-cart-field]", co), wrapBox = $("[data-wrap]", co), wrapFee = +co.getAttribute("data-wrap-fee");
-    var fresh = null;
-    function totals() {
-      if (!fresh) return;
-      var w = wrapBox.checked ? wrapFee : 0;
-      $("[data-co-subtotal]").textContent = money(fresh.subtotal);
-      $("[data-co-delivery]").textContent = fresh.delivery ? money(fresh.delivery) : T.free;
-      $("[data-co-wrap-row]").hidden = !w;
-      $("[data-co-total]").textContent = money(fresh.subtotal + fresh.delivery + w);
-      $("[data-message]").hidden = !wrapBox.checked;
-    }
-    wrapBox.addEventListener("change", totals);
-    var items = cart.map(function (l) { return { id: l.id, qty: l.qty }; });
-    field.value = JSON.stringify(items);
-    fetch(S.base + "api/cart.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: field.value })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        fresh = d;
-        // Sync the browser cart with current prices and availability.
-        cart = d.lines.map(function (l) { return { id: l.id, name: l.name, price: l.price, image: l.image, url: l.url, qty: l.qty }; });
-        saveCart();
-        field.value = JSON.stringify(cart.map(function (l) { return { id: l.id, qty: l.qty }; }));
-        $("[data-co-lines]").innerHTML = d.lines.length ? d.lines.map(function (l) {
-          return '<div class="co-line"><img src="' + esc(l.image) + '" alt=""><div>' + esc(l.name) + '<div class="q">× ' + l.qty + "</div></div><strong>" + money(l.line) + "</strong></div>";
-        }).join("") : '<p class="muted">' + esc(T.empty) + "</p>";
-        $("[data-co-submit]").disabled = !d.lines.length;
-        totals();
-      });
-    co.addEventListener("submit", function () { $("[data-co-submit]").classList.add("loading"); });
-  }
-  if ($("[data-order-done]")) { cart = []; saveCart(); }
 })();

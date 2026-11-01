@@ -11,7 +11,6 @@ $fields = [
     'instagram' => ['Instagram (@compte)', 'text'],
     'delivery_fee' => ['Frais de livraison (DH)', 'number'],
     'free_delivery_from' => ['Livraison offerte à partir de (DH, 0 = jamais)', 'number'],
-    'wrap_fee' => ['Prix de l\'emballage cadeau (DH)', 'number'],
     'budget_min' => ['Budget minimum du curseur (DH)', 'number'],
     'budget_max' => ['Budget maximum du curseur (DH)', 'number'],
 ];

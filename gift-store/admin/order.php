@@ -39,7 +39,8 @@ admin_header('Commande ' . $o['ref'], 'orders');
     <div>
         <div class="panel">
             <h2>Client</h2>
-            <p><strong><?= e($o['name']) ?></strong><br><?= e(trim(chunk_split($o['phone'], 2, ' '))) ?><br><?= e($o['city']) ?><br><?= nl2br(e($o['address'])) ?></p>
+            <p><strong><?= e($o['name']) ?></strong><br><?= e(trim(chunk_split($o['phone'], 2, ' '))) ?><br><?= e($o['city']) ?><?php if ($o['address'] !== ''): ?><br><?= nl2br(e($o['address'])) ?><?php endif; ?></p>
+            <p class="muted small">Appelez pour confirmer la commande et demander l'adresse exacte de livraison.</p>
             <?php if ($o['note']): ?><p class="note">📝 <?= e($o['note']) ?></p><?php endif; ?>
             <div class="actions">
                 <a class="btn primary" href="tel:<?= e($o['phone']) ?>">📞 Appeler</a>

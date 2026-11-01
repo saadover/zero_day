@@ -147,9 +147,17 @@ admin_header($id ? 'Modifier le produit' : 'Nouveau produit', 'products');
         <div class="thumbs" data-preview-out></div>
     </section>
 
-    <section class="panel tagging">
+    <section class="panel tagging" data-tagging data-new="<?= $id ? '0' : '1' ?>" data-suggest-url="<?= e(url('admin/suggest.php')) ?>">
         <h2>Pour qui ? <small class="muted">— ce que le conseiller cadeau utilise</small></h2>
         <p class="help">Ces informations sont des règles strictes : un produit « Femme » ne sera jamais proposé pour un homme, et un produit 18–99 ans jamais pour un enfant de 10 ans.</p>
+
+        <div class="suggest-box" data-suggest-box>
+            <div>
+                <strong>✨ Remplissage automatique</strong>
+                <span class="muted small" data-suggest-status><?= $id ? 'Relancez-le si vous avez changé le nom ou la description.' : 'Se lance tout seul quand le nom et la description sont écrits. Vérifiez ensuite et corrigez si besoin.' ?></span>
+            </div>
+            <button type="button" class="btn small" data-suggest>Remplir à partir du texte</button>
+        </div>
 
         <div class="tag-block">
             <h3>Genre</h3>
@@ -161,11 +169,13 @@ admin_header($id ? 'Modifier le produit' : 'Nouveau produit', 'products');
         </div>
 
         <div class="tag-block">
-            <h3>Âge</h3>
-            <div class="age-row">
-                <label>De <input type="number" name="age_min" min="0" max="99" value="<?= (int)$p['age_min'] ?>" data-age-min></label>
-                <label>à <input type="number" name="age_max" min="0" max="99" value="<?= (int)$p['age_max'] ?>" data-age-max> ans</label>
+            <h3>Âge <span class="age-out" data-age-out></span></h3>
+            <div class="arange" data-arange>
+                <div class="arange-track"><i data-arange-fill></i></div>
+                <input type="range" min="0" max="99" value="<?= (int)$p['age_min'] ?>" name="age_min" data-age-min aria-label="Âge minimum">
+                <input type="range" min="0" max="99" value="<?= (int)$p['age_max'] ?>" name="age_max" data-age-max aria-label="Âge maximum">
             </div>
+            <div class="arange-scale"><span>0</span><span>12</span><span>18</span><span>30</span><span>50</span><span>99+</span></div>
             <div class="presets">
                 <?php foreach (['Bébé' => [0, 2], 'Enfant' => [3, 12], 'Ado' => [13, 17], 'Jeune' => [16, 35], 'Adulte' => [18, 99], 'Senior' => [55, 99], 'Tous' => [0, 99]] as $l => [$a, $b]): ?>
                     <button type="button" class="mini" data-age-preset="<?= $a ?>,<?= $b ?>"><?= $l ?> <small><?= $a ?>–<?= $b ?></small></button>

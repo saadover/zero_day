@@ -1,5 +1,5 @@
 <?php
-// Page shell (header, mobile tab bar, cart drawer, footer) and the product card.
+// Page shell (header, mobile tab bar, quick-buy pop-up, footer) and the product card.
 
 function icon(string $name, int $size = 22): string
 {
@@ -42,8 +42,8 @@ function page_header(string $title = '', array $opt = []): void
         'base' => base_url(),
         'csrf' => csrf_token(),
         't' => [
-            'added' => t('added'), 'add' => t('add_to_cart'), 'empty' => t('cart_empty'), 'free' => t('free'),
-            'freeLeft' => t('free_left'), 'freeOk' => t('free_ok'), 'remove' => t('remove'),
+            'buy' => t('buy'), 'free' => t('free'), 'errPhone' => t('err_phone10'), 'errName' => t('err_name'), 'errCity' => t('err_city'),
+            'okSub' => t('qb_ok_sub'), 'closeTitle' => t('res_close'), 'closeNone' => t('res_close_none'),
             'thinking' => [t('thinking_1'), t('thinking_2'), t('thinking_3')],
             'years' => t('f_years'), 'match' => t('res_match'), 'best' => t('res_best'), 'error' => t('res_error'),
             'ages' => [t('age_baby'), t('age_kid'), t('age_teen'), t('age_young'), t('age_adult'), t('age_senior')],
@@ -94,7 +94,6 @@ function page_header(string $title = '', array $opt = []): void
                 <?php endforeach; ?>
             </div>
             <button class="icon-btn search-toggle" type="button" aria-label="<?= e(t('search_ph')) ?>" data-search-toggle><?= icon('search') ?></button>
-            <button class="icon-btn cart-btn" type="button" aria-label="<?= e(t('nav_cart')) ?>" data-cart-open><?= icon('bag') ?><span class="badge" data-cart-count hidden>0</span></button>
         </div>
     </div>
 </header>
@@ -133,28 +132,64 @@ function page_footer(array $opt = []): void
     <a href="<?= e(url()) ?>" class="<?= $active === 'home' ? 'on' : '' ?>"><?= icon('home') ?><span><?= e(t('nav_home')) ?></span></a>
     <a href="<?= e(url('shop.php')) ?>" class="<?= $active === 'shop' ? 'on' : '' ?>"><?= icon('grid') ?><span><?= e(t('nav_shop')) ?></span></a>
     <a href="<?= e(url()) ?>#finder" class="tab-ai" data-finder-link><span class="tab-ai-bubble"><?= icon('sparkle') ?></span><span><?= e(t('nav_finder')) ?></span></a>
-    <button type="button" data-cart-open><?= icon('bag') ?><span><?= e(t('nav_cart')) ?></span><span class="badge" data-cart-count hidden>0</span></button>
+    <?php if ($wa): ?>
+    <a href="https://wa.me/<?= e($wa) ?>" target="_blank" rel="noopener"><?= icon('whatsapp') ?><span><?= e(t('nav_help')) ?></span></a>
+    <?php else: ?>
+    <a href="<?= e(url('shop.php')) ?>?sort=featured"><?= icon('heart') ?><span><?= e(t('sec_featured')) ?></span></a>
+    <?php endif; ?>
 </nav>
 
-<div class="drawer-scrim" data-cart-close hidden></div>
-<aside class="drawer" id="cart" aria-label="<?= e(t('cart_title')) ?>" aria-hidden="true">
-    <div class="drawer-head">
-        <h2><?= e(t('cart_title')) ?></h2>
-        <button class="icon-btn" type="button" data-cart-close aria-label="Close"><?= icon('close') ?></button>
+<div class="modal-scrim" data-qb-close hidden></div>
+<div class="modal" id="quickbuy" role="dialog" aria-modal="true" aria-labelledby="qb-title" aria-hidden="true">
+    <button class="icon-btn modal-x" type="button" data-qb-close aria-label="Close"><?= icon('close') ?></button>
+    <form class="qb" data-qb-form novalidate>
+        <div class="qb-product">
+            <img src="" alt="" data-qb-img width="72" height="72">
+            <div>
+                <h2 id="qb-title" data-qb-name></h2>
+                <div class="qb-price"><strong data-qb-price></strong></div>
+            </div>
+            <div class="stepper small" aria-label="<?= e(t('qty')) ?>">
+                <button type="button" data-qb-step="-1" aria-label="-"><?= icon('minus', 16) ?></button>
+                <span data-qb-qty>1</span>
+                <button type="button" data-qb-step="1" aria-label="+"><?= icon('plus', 16) ?></button>
+            </div>
+        </div>
+        <div class="field">
+            <label for="qb-name"><?= e(t('co_name')) ?></label>
+            <input id="qb-name" name="name" autocomplete="name" required maxlength="120">
+            <small data-err="name" hidden></small>
+        </div>
+        <div class="field">
+            <label for="qb-phone"><?= e(t('co_phone')) ?></label>
+            <input id="qb-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="06XXXXXXXX" pattern="0[5-7][0-9]{8}" dir="ltr" required>
+            <small data-err="phone" hidden></small>
+        </div>
+        <div class="field">
+            <label for="qb-city"><?= e(t('co_city')) ?></label>
+            <select id="qb-city" name="city" required>
+                <option value=""><?= e(t('co_city_pick')) ?></option>
+                <?php foreach (cities() as $c): ?><option><?= e($c) ?></option><?php endforeach; ?>
+            </select>
+            <small data-err="city" hidden></small>
+        </div>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="qb-totals">
+            <div class="row"><span><?= e(t('delivery')) ?></span><span data-qb-delivery></span></div>
+            <div class="row total"><span><?= e(t('total')) ?></span><strong data-qb-total></strong></div>
+        </div>
+        <p class="form-error" data-qb-error hidden></p>
+        <button class="btn primary big block shine" type="submit"><?= icon('check', 20) ?> <span><?= e(t('qb_submit')) ?></span></button>
+        <p class="tiny muted center qb-cod"><?= icon('cash', 15) ?> <?= e(t('cod_note')) ?></p>
+    </form>
+    <div class="qb-done" data-qb-done hidden>
+        <div class="ok-burst small" aria-hidden="true"><span class="ok-circle"><?= icon('check', 34) ?></span><?php for ($i = 0; $i < 12; $i++): ?><i style="--a:<?= $i * 30 ?>deg;--d:<?= $i * 25 ?>ms"></i><?php endfor; ?></div>
+        <h2><?= e(t('ok_title')) ?></h2>
+        <p class="muted" data-qb-done-text></p>
+        <p class="qb-ref"><?= e(t('ok_ref')) ?> <strong data-qb-ref></strong></p>
+        <button class="btn ghost block" type="button" data-qb-close><?= e(t('ok_back')) ?></button>
     </div>
-    <div class="free-meter" data-free-meter><div class="free-bar"><i></i></div><p></p></div>
-    <div class="drawer-body" data-cart-items></div>
-    <div class="drawer-empty" data-cart-empty>
-        <div class="empty-art"><?= icon('gift', 56) ?></div>
-        <p><?= e(t('cart_empty')) ?></p>
-        <a class="btn ghost" href="<?= e(url()) ?>#finder" data-cart-close><?= icon('sparkle', 18) ?> <?= e(t('cart_empty_cta')) ?></a>
-    </div>
-    <div class="drawer-foot" data-cart-foot>
-        <div class="row"><span><?= e(t('subtotal')) ?></span><strong data-cart-subtotal></strong></div>
-        <a class="btn primary block" href="<?= e(url('checkout.php')) ?>"><?= e(t('checkout')) ?> <?= icon('arrow', 18) ?></a>
-        <p class="tiny muted center"><?= icon('cash', 15) ?> <?= e(t('cod_note')) ?></p>
-    </div>
-</aside>
+</div>
 <div class="toast" role="status" aria-live="polite" data-toast></div>
 </body>
 </html>
@@ -177,13 +212,19 @@ function product_card(array $p, string $extra = ''): string
             <h3><a href="<?= e($p['url']) ?>"><?= e($p['name']) ?></a></h3>
             <div class="card-foot">
                 <div class="price"><strong><?= e(money($p['price'])) ?></strong><?php if ($off): ?> <s><?= e(money($p['compare_price'])) ?></s><?php endif; ?></div>
-                <?php if ($stock): ?>
-                <button class="add-btn" type="button" aria-label="<?= e(t('add_to_cart')) ?>" data-add='<?= e(json_encode(['id' => (int)$p['id'], 'name' => $p['name'], 'price' => (int)$p['price'], 'image' => img_url($p['image']), 'url' => $p['url']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'><?= icon('plus', 20) ?></button>
-                <?php endif; ?>
             </div>
+            <?php if ($stock): ?>
+            <button class="buy-btn" type="button" data-buy-now='<?= e(buy_data($p)) ?>'><?= icon('bag', 17) ?> <?= e(t('buy')) ?></button>
+            <?php endif; ?>
         </div>
     </article>
     <?php return ob_get_clean();
+}
+
+// What the quick-buy pop-up needs to know about a product.
+function buy_data(array $p): string
+{
+    return json_encode(['id' => (int)$p['id'], 'name' => $p['name'], 'price' => (int)$p['price'], 'image' => img_url($p['image']), 'max' => $p['stock'] === null || $p['stock'] === '' ? 10 : min(10, (int)$p['stock'])], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 // Active products with their category name.

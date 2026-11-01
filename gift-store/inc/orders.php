@@ -34,33 +34,30 @@ function delivery_fee(int $subtotal): int
     return ($free > 0 && $subtotal >= $free) ? 0 : (int)setting('delivery_fee', '35');
 }
 
-// Moroccan mobile/landline → "0612345678", or null if invalid.
+// Moroccan number as typed by the customer: exactly 10 digits starting with
+// 05, 06 or 07 (spaces, dots and dashes are ignored). Returns null if invalid.
 function normalize_phone(string $s): ?string
 {
-    $d = preg_replace('/\D/', '', $s);
-    if (str_starts_with($d, '00212')) $d = '0' . substr($d, 5);
-    elseif (str_starts_with($d, '212')) $d = '0' . substr($d, 3);
+    $d = preg_replace('/[\s.\-]/', '', $s);
     return preg_match('/^0[5-7]\d{8}$/', $d) ? $d : null;
 }
 
-function create_order(array $in, array $cart): array
+// Quick order from the "Acheter" pop-up: one product, name, phone and city.
+function create_order(array $in): array
 {
     $errors = [];
     $name = trim((string)($in['name'] ?? ''));
     $phone = normalize_phone((string)($in['phone'] ?? ''));
     $city = trim((string)($in['city'] ?? ''));
-    $address = trim((string)($in['address'] ?? ''));
     if (mb_strlen($name) < 2) $errors['name'] = t('err_name');
-    if (!$phone) $errors['phone'] = t('err_phone');
+    if (!$phone) $errors['phone'] = t('err_phone10');
     if (!in_array($city, cities(), true)) $errors['city'] = t('err_city');
-    if (mb_strlen($address) < 6) $errors['address'] = t('err_address');
-    if (!$cart['lines']) $errors['cart'] = t('err_cart');
+    $cart = price_cart([['id' => (int)($in['id'] ?? 0), 'qty' => max(1, min(10, (int)($in['qty'] ?? 1)))]]);
+    if (!$cart['lines']) $errors['product'] = t('err_cart');
     if ($errors) return ['errors' => $errors];
 
-    $wrap = !empty($in['gift_wrap']);
-    $wrapFee = $wrap ? (int)setting('wrap_fee', '25') : 0;
     $delivery = delivery_fee($cart['subtotal']);
-    $total = $cart['subtotal'] + $delivery + $wrapFee;
+    $total = $cart['subtotal'] + $delivery;
 
     $pdo = db();
     $pdo->beginTransaction();
@@ -68,12 +65,9 @@ function create_order(array $in, array $cart): array
         do {
             $ref = 'HD' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 6));
         } while (q('SELECT 1 FROM orders WHERE ref = ?', [$ref])->fetchColumn());
-        $token = bin2hex(random_bytes(12));
         q('INSERT INTO orders (ref, token, name, phone, city, address, note, gift_wrap, gift_message, subtotal, delivery, wrap_fee, total, status, ip, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
-            $ref, $token, mb_substr($name, 0, 120), $phone, $city, mb_substr($address, 0, 500),
-            mb_substr(trim((string)($in['note'] ?? '')), 0, 500), $wrap ? 1 : 0,
-            $wrap ? mb_substr(trim((string)($in['gift_message'] ?? '')), 0, 300) : '',
-            $cart['subtotal'], $delivery, $wrapFee, $total, 'new', client_ip(), time(),
+            $ref, bin2hex(random_bytes(12)), mb_substr($name, 0, 120), $phone, $city, '', '', 0, '',
+            $cart['subtotal'], $delivery, 0, $total, 'new', client_ip(), time(),
         ]);
         $orderId = (int)$pdo->lastInsertId();
         foreach ($cart['lines'] as $l) {
@@ -86,7 +80,7 @@ function create_order(array $in, array $cart): array
         throw $e;
     }
     notify_new_order($ref, $name, $phone, $city, $total, $cart['lines']);
-    return ['ref' => $ref, 'token' => $token];
+    return ['ref' => $ref, 'total' => $total, 'phone' => $phone];
 }
 
 function notify_new_order(string $ref, string $name, string $phone, string $city, int $total, array $lines): void

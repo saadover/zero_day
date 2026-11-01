@@ -33,7 +33,6 @@ $tags = array_merge(
     array_map(fn($k) => tag_label(interests(), $k), array_filter(list_split($p['interests']), fn($k) => isset(interests()[$k]))),
     array_map(fn($k) => tag_label(occasions(), $k), array_filter(list_split($p['occasions']), fn($k) => isset(occasions()[$k])))
 );
-$cartItem = ['id' => (int)$p['id'], 'name' => $p['name'], 'price' => (int)$p['price'], 'image' => img_url($p['image']), 'url' => $p['url']];
 $wa = setting('whatsapp');
 $abs = (is_https() ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '');
 
@@ -70,13 +69,13 @@ page_header($p['name'], ['active' => 'shop', 'description' => mb_substr((string)
         </div>
 
         <?php if ($stock): ?>
-        <div class="buy" data-buy='<?= e(json_encode($cartItem, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>'>
+        <div class="buy" data-buy='<?= e(buy_data($p)) ?>'>
             <div class="stepper" aria-label="<?= e(t('qty')) ?>">
                 <button type="button" data-step="-1" aria-label="-"><?= icon('minus', 18) ?></button>
-                <input type="number" value="1" min="1" max="20" inputmode="numeric" data-qty aria-label="<?= e(t('qty')) ?>">
+                <input type="number" value="1" min="1" max="10" inputmode="numeric" data-qty aria-label="<?= e(t('qty')) ?>">
                 <button type="button" data-step="1" aria-label="+"><?= icon('plus', 18) ?></button>
             </div>
-            <button class="btn primary grow shine" type="button" data-buy-add><?= icon('bag', 20) ?> <span><?= e(t('add_to_cart')) ?></span></button>
+            <button class="btn primary grow shine" type="button" data-buy-main><?= icon('bag', 20) ?> <span><?= e(t('buy_now')) ?></span></button>
         </div>
         <?php if ($wa): ?>
             <a class="btn ghost block wa" target="_blank" rel="noopener" href="https://wa.me/<?= e($wa) ?>?text=<?= rawurlencode($p['name'] . ' — ' . money($p['price']) . "\n" . $abs . $p['url']) ?>"><?= icon('whatsapp', 20) ?> <?= e(t('order_whatsapp')) ?></a>
@@ -104,7 +103,7 @@ page_header($p['name'], ['active' => 'shop', 'description' => mb_substr((string)
 <?php if ($stock): ?>
 <div class="sticky-buy" data-sticky-buy>
     <div><strong><?= e(money($p['price'])) ?></strong><span class="tiny muted"><?= e(t('trust_cod')) ?></span></div>
-    <button class="btn primary" type="button" data-buy-add><?= icon('bag', 18) ?> <?= e(t('add_to_cart')) ?></button>
+    <button class="btn primary" type="button" data-buy-main><?= icon('bag', 18) ?> <?= e(t('buy_now')) ?></button>
 </div>
 <?php endif; ?>
 

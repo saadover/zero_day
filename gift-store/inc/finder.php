@@ -11,9 +11,13 @@
 // 3. Jev (TypeSafe) then rates the best candidates against the whole
 //    description, and the two scores are combined. If Jev can't be reached the
 //    local score is used on its own, so the finder always answers.
+// 4. When few products pass every rule, the closest ones are added in their
+//    own group, each saying what differs (a bit over budget, made for another
+//    age…). Gender is never relaxed: those would be wrong, not close.
 
 const FINDER_MAX_JEV = 24;      // candidates sent to Jev per search
 const FINDER_MAX_RESULTS = 15;  // 3 top picks + up to 12 more
+const FINDER_MAX_CLOSE = 6;     // "close to your criteria" alternatives
 const FINDER_RATE = 20;         // searches per IP per 10 minutes (cached repeats are free)
 
 function norm_text(string $s): string
@@ -33,15 +37,18 @@ function norm_text(string $s): string
 // Does $kw appear in $text as a word? Latin keywords may take a short ending
 // (plurals, "voyager" for "voyage"); short ones must match exactly. Arabic
 // keywords may take a prefix such as ال or و.
+// A keyword starting with "=" must match exactly (no endings): "=mari" finds
+// "mari" (husband) but not "mariage" (wedding).
 function kw_regex(string $kw): string
 {
-    $kw = norm_text($kw);
+    $exact = str_starts_with($kw, '=');
+    $kw = norm_text(ltrim($kw, '='));
     $q = preg_quote($kw, '/');
     $q = str_replace('\ ', '\s?', $q);
     if (preg_match('/\p{Arabic}/u', $kw)) {
         return '/(?<![\p{Arabic}])(?:ال|و|ل|ب|ف)?' . $q . '(?:ه|ها|هم|ات|ين)?(?![\p{Arabic}])/u';
     }
-    $suffix = mb_strlen($kw) <= 3 ? '' : '[a-z]{0,3}';
+    $suffix = ($exact || mb_strlen($kw) <= 3) ? '' : '[a-z]{0,3}';
     return '/(?<![\p{L}\p{N}])' . $q . $suffix . '(?![\p{L}\p{N}])/u';
 }
 
@@ -153,53 +160,12 @@ function jev_key(): string
     return (string)(setting('jev_api_key') ?: ($CONFIG['jev_api_key'] ?? getenv('TYPESAFE_API_KEY') ?: ''));
 }
 
-// Asks Jev to rate every candidate for this person. Returns [id => 0..1] or throws.
-function jev_rate(array $cands, array $c, string $note): array
+// One TypeSafe request. Returns the `answers` object or throws.
+function jev_call(array $state, array $questions, int $timeout = 30): array
 {
     global $CONFIG;
     $key = jev_key();
     if ($key === '') throw new RuntimeException('no key');
-    $products = [];
-    $questions = [];
-    $levels = [
-        'Wrong gift: does not suit their gender, age or the relationship, or clashes with what the description says (something they dislike, already have, or cannot use).',
-        'Poor gift: technically suitable but unrelated to who they are; a forgettable choice.',
-        'Decent gift: a safe, pleasant choice for this kind of person, but not personal.',
-        'Great gift: clearly fits their interests or the occasion described.',
-        'Perfect gift: exactly what someone who knows them well would pick for them.',
-    ];
-    foreach ($cands as $p) {
-        $k = 'p' . $p['id'];
-        $products[$k] = [
-            'name' => $p['name'],
-            'category' => $p['category'] ?? '',
-            'price_mad' => (int)$p['price'],
-            'description' => mb_substr(trim(strip_tags((string)$p['description'])), 0, 260),
-            'tags' => trim(implode(', ', array_merge(
-                array_map(fn($i) => interests()[$i]['label']['en'] ?? $i, list_split($p['interests'])),
-                array_map(fn($o) => occasions()[$o]['label']['en'] ?? $o, list_split($p['occasions'])),
-                list_split($p['tags'])
-            ))),
-        ];
-        $questions[$k] = [
-            'type' => 'score',
-            'instructions' => "Rate how good a gift `products.$k` would be for the person described in `recipient`, "
-                . 'given by someone who is their `recipient.relationship` and spending up to `recipient.budget_mad` dirhams. '
-                . 'Weigh their gender, age, the relationship and everything in `recipient.description`, which may be written '
-                . 'in English, French or Moroccan Darija (in Latin letters like "kaybghi lkora" or in Arabic script).',
-            'criteria' => $levels,
-        ];
-    }
-    $state = [
-        'recipient' => [
-            'gender' => $c['gender'],
-            'age' => $c['age'],
-            'relationship' => relation_label($c['relation'], $c['gender'], 'en') . ' (of the gift giver)',
-            'budget_mad' => $c['max'] >= 100000000 ? 'from ' . $c['min'] . ', no upper limit' : $c['min'] . ' to ' . $c['max'],
-            'description' => $note !== '' ? $note : 'No extra description given.',
-        ],
-        'products' => $products,
-    ];
     $body = json_encode(['state' => $state, 'model' => 'jev-latest', 'questions' => $questions], JSON_UNESCAPED_UNICODE);
     $apiUrl = setting('jev_api_url') ?: ($CONFIG['jev_api_url'] ?? 'https://api.typesafe.ai/v1/systemone');
 
@@ -211,7 +177,7 @@ function jev_rate(array $cands, array $c, string $note): array
             CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $key, 'Content-Type: application/json'],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 6,
-            CURLOPT_TIMEOUT => 30,
+            CURLOPT_TIMEOUT => $timeout,
         ]);
         $res = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -222,20 +188,81 @@ function jev_rate(array $cands, array $c, string $note): array
             continue;
         }
         if ($res === false) throw new RuntimeException('Jev unreachable: ' . $err);
+        if ($status === 401) throw new RuntimeException('TypeSafe rejected the API key.');
         if ($status !== 200) throw new RuntimeException('Jev answered ' . $status . ': ' . substr((string)$res, 0, 200));
         break;
     }
     $answers = json_decode((string)$res, true)['answers'] ?? null;
     if (!is_array($answers)) throw new RuntimeException('Jev answer unreadable');
+    return $answers;
+}
 
+// A Score answer as 0..1, using its own legend whatever the level numbering.
+function jev_unit(?array $a): ?float
+{
+    if (!$a || !isset($a['score'])) return null;
+    $levels = isset($a['legend']) && is_array($a['legend']) ? array_map('floatval', array_keys($a['legend'])) : [0, 4];
+    $lo = min($levels);
+    $hi = max($levels);
+    return $hi > $lo ? max(0, min(1, ((float)$a['score'] - $lo) / ($hi - $lo))) : 0;
+}
+
+// What Jev is told about a product.
+function jev_product(array $p): array
+{
+    return [
+        'name' => $p['name'],
+        'category' => $p['category'] ?? '',
+        'price_mad' => (int)$p['price'],
+        'description' => mb_substr(trim(strip_tags((string)$p['description'])), 0, 260),
+        'made_for' => ['gender' => $p['gender'], 'ages' => (int)$p['age_min'] . '-' . (int)$p['age_max']],
+        'tags' => trim(implode(', ', array_merge(
+            array_map(fn($i) => interests()[$i]['label']['en'] ?? $i, list_split($p['interests'])),
+            array_map(fn($o) => occasions()[$o]['label']['en'] ?? $o, list_split($p['occasions'])),
+            list_split($p['tags'])
+        ))),
+    ];
+}
+
+// Asks Jev to rate every candidate for this person. Returns [id => 0..1] or throws.
+function jev_rate(array $cands, array $c, string $note): array
+{
+    $products = [];
+    $questions = [];
+    $levels = [
+        'Wrong gift: does not suit their gender, age or the relationship, or clashes with what the description says (something they dislike, already have, or cannot use).',
+        'Poor gift: technically suitable but unrelated to who they are; a forgettable choice.',
+        'Decent gift: a safe, pleasant choice for this kind of person, but not personal.',
+        'Great gift: clearly fits their interests or the occasion described.',
+        'Perfect gift: exactly what someone who knows them well would pick for them.',
+    ];
+    foreach ($cands as $p) {
+        $k = 'p' . $p['id'];
+        $products[$k] = jev_product($p);
+        $questions[$k] = [
+            'type' => 'score',
+            'instructions' => "Rate how good a gift `products.$k` would be for the person described in `recipient`, "
+                . 'given by someone who is their `recipient.relationship` and spending `recipient.budget_mad` dirhams. '
+                . 'Weigh their gender, age, the relationship and everything in `recipient.description`, which may be written '
+                . 'in English, French or Moroccan Darija (in Latin letters like "kaybghi lkora" or in Arabic script).',
+            'criteria' => $levels,
+        ];
+    }
+    $state = [
+        'recipient' => [
+            'gender' => $c['gender'],
+            'age' => $c['age'],
+            'relationship' => relation_label($c['relation'], $c['gender'], 'en') . ' (of the gift giver)',
+            'budget_mad' => $c['max'] >= 100000000 ? 'from ' . $c['min'] . ', no upper limit' : $c['min'] . ' to ' . $c['max'],
+            'description' => $c['note'] !== '' ? $c['note'] : 'No extra description given.',
+        ],
+        'products' => $products,
+    ];
+    $answers = jev_call($state, $questions);
     $out = [];
     foreach ($cands as $p) {
-        $a = $answers['p' . $p['id']] ?? null;
-        if (!$a || !isset($a['score'])) continue;
-        $levelsSeen = isset($a['legend']) && is_array($a['legend']) ? array_map('floatval', array_keys($a['legend'])) : [0, 4];
-        $lo = min($levelsSeen);
-        $hi = max($levelsSeen);
-        $out[(int)$p['id']] = $hi > $lo ? max(0, min(1, ((float)$a['score'] - $lo) / ($hi - $lo))) : 0;
+        $u = jev_unit($answers['p' . $p['id']] ?? null);
+        if ($u !== null) $out[(int)$p['id']] = $u;
     }
     if (!$out) throw new RuntimeException('Jev rated nothing');
     return $out;
@@ -255,10 +282,53 @@ function finder_input(array $in): array
     return [['gender' => $gender, 'age' => $age, 'relation' => $relation, 'min' => $min, 'max' => $max, 'note' => $note], null];
 }
 
+// Products of the right gender that miss the other rules, with how far off
+// they are and what differs. Closest first.
+function finder_close(array $c, array $exclude, int $limit): array
+{
+    $rows = q(
+        'SELECT p.*, c.name AS category FROM products p LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.active = 1 AND (p.gender = ? OR p.gender = ?) AND (p.stock IS NULL OR p.stock > 0)',
+        [$c['gender'], 'unisex']
+    )->fetchAll();
+    $out = [];
+    foreach ($rows as $p) {
+        if (isset($exclude[(int)$p['id']])) continue;
+        $gaps = [];
+        $d = 0.0;
+        $price = (int)$p['price'];
+        if ($c['max'] < 100000000 && $price > $c['max']) {
+            $d += ($price - $c['max']) / max(50, $c['max']);
+            $gaps[] = t('gap_over', ['x' => money($price - $c['max'])]);
+        } elseif ($price < $c['min']) {
+            $d += 0.3 * ($c['min'] - $price) / max(50, $c['min']);
+            $gaps[] = t('gap_under');
+        }
+        $amin = (int)$p['age_min'];
+        $amax = (int)$p['age_max'];
+        if ($c['age'] < $amin || $c['age'] > $amax) {
+            $years = $c['age'] < $amin ? $amin - $c['age'] : $c['age'] - $amax;
+            $d += $years / 8;
+            $gaps[] = t('gap_age', ['a' => $amin, 'b' => $amax >= 99 ? '99+' : $amax]);
+        }
+        $rel = list_split($p['relations']);
+        if ($rel && !in_array($c['relation'], $rel, true)) {
+            $d += 0.6;
+            $gaps[] = t('gap_relation', ['r' => relation_label($c['relation'], $c['gender'])]);
+        }
+        if (!$gaps || $d > 4) continue; // too far to be useful
+        $p['_dist'] = $d;
+        $p['_gaps'] = $gaps;
+        $out[] = $p;
+    }
+    usort($out, fn($a, $b) => $a['_dist'] <=> $b['_dist']);
+    return array_slice($out, 0, $limit);
+}
+
 function finder_recommend(array $c): array
 {
     $read = read_notes($c['note']);
-    $hash = sha1(json_encode([$c, setting('catalog_version', '1'), lang(), jev_key() !== '']));
+    $hash = sha1(json_encode([$c, setting('catalog_version', '1'), lang(), jev_key() !== '', 2]));
     $now = time();
 
     $hit = q('SELECT response FROM finder_cache WHERE hash = ? AND created_at > ?', [$hash, $now - 7 * 86400])->fetchColumn();
@@ -267,33 +337,48 @@ function finder_recommend(array $c): array
     $recent = (int)q('SELECT COUNT(*) FROM finder_log WHERE ip = ? AND created_at > ?', [client_ip(), $now - 600])->fetchColumn();
     if ($recent >= FINDER_RATE) return ['error' => t('res_error'), 'status' => 429];
 
-    $cands = finder_candidates($c);
-    foreach ($cands as &$p) $p['_local'] = local_score($p, $c, $read);
+    $exact = finder_candidates($c);
+    foreach ($exact as &$p) $p['_local'] = local_score($p, $c, $read);
     unset($p);
-    usort($cands, fn($a, $b) => $b['_local']['score'] <=> $a['_local']['score']);
+    usort($exact, fn($a, $b) => $b['_local']['score'] <=> $a['_local']['score']);
+
+    // Fewer than 6 exact matches: also look at the closest ones.
+    $close = [];
+    if (count($exact) < 6) {
+        $ids = array_flip(array_map(fn($p) => (int)$p['id'], $exact));
+        $close = finder_close($c, $ids, FINDER_MAX_CLOSE + 4);
+        foreach ($close as &$p) $p['_local'] = local_score($p, $c, $read);
+        unset($p);
+    }
 
     $source = 'local';
-    if (count($cands) > 1) {
+    $batch = array_merge(array_slice($exact, 0, FINDER_MAX_JEV - min(count($close), 8)), array_slice($close, 0, 8));
+    $jev = [];
+    if (count($batch) > 1) {
         try {
-            $jev = jev_rate(array_slice($cands, 0, FINDER_MAX_JEV), $c, $c['note']);
-            foreach ($cands as &$p) {
-                $l = $p['_local']['score'];
-                $p['_score'] = isset($jev[(int)$p['id']])
-                    ? 0.78 * $jev[(int)$p['id']] + 0.22 * $l - ($p['_local']['dislikes'] ? 0.3 : 0)
-                    : 0.6 * $l; // not in Jev's batch: ranked after the ones Jev saw
-            }
-            unset($p);
+            $jev = jev_rate($batch, $c, $c['note']);
             $source = 'jev';
         } catch (Throwable $e) {
             error_log('[finder] ' . $e->getMessage());
         }
     }
-    foreach ($cands as &$p) if (!isset($p['_score'])) $p['_score'] = $p['_local']['score'];
+    $score = function (array $p) use ($jev): float {
+        $l = $p['_local']['score'];
+        if (!$jev) return $l;
+        return isset($jev[(int)$p['id']])
+            ? 0.78 * $jev[(int)$p['id']] + 0.22 * $l - ($p['_local']['dislikes'] ? 0.3 : 0)
+            : 0.6 * $l; // not in Jev's batch: ranked after the ones Jev saw
+    };
+    foreach ($exact as &$p) $p['_score'] = $score($p);
     unset($p);
-    usort($cands, fn($a, $b) => $b['_score'] <=> $a['_score']);
-    $cands = hydrate_products(array_slice($cands, 0, FINDER_MAX_RESULTS));
+    foreach ($close as &$p) $p['_score'] = $score($p) - 0.12 * $p['_dist'];
+    unset($p);
+    usort($exact, fn($a, $b) => $b['_score'] <=> $a['_score']);
+    usort($close, fn($a, $b) => $b['_score'] <=> $a['_score']);
+    $exact = hydrate_products(array_slice($exact, 0, FINDER_MAX_RESULTS));
+    $close = hydrate_products(array_slice($close, 0, FINDER_MAX_CLOSE));
 
-    $items = array_map(fn($p) => [
+    $item = fn(array $p, bool $isClose) => [
         'id' => (int)$p['id'],
         'name' => $p['name'],
         'price' => (int)$p['price'],
@@ -304,13 +389,23 @@ function finder_recommend(array $c): array
         'url' => $p['url'],
         'category' => $p['category'] ?? '',
         'match' => (int)round(max(0, min(1, $p['_score'])) * 100),
-        'reasons' => finder_reasons($p, $c),
-    ], $cands);
+        'reasons' => $isClose ? [] : finder_reasons($p, $c),
+        'gaps' => $isClose ? $p['_gaps'] : [],
+        'close' => $isClose,
+    ];
+    $exactItems = array_map(fn($p) => $item($p, false), $exact);
+    $closeItems = array_map(fn($p) => $item($p, true), $close);
+
+    // The podium always has 3 when possible: exact matches first, then the closest.
+    $top = array_slice($exactItems, 0, 3);
+    while (count($top) < 3 && $closeItems) $top[] = array_shift($closeItems);
 
     $res = [
         'source' => $source,
-        'top' => array_slice($items, 0, 3),
-        'more' => array_slice($items, 3),
+        'exact' => count($exactItems),
+        'top' => $top,
+        'more' => array_slice($exactItems, 3),
+        'close' => $closeItems,
         'understood' => array_merge(
             array_map(fn($k) => ['type' => 'like', 'label' => tag_label(interests(), $k)], $read['likes']),
             array_map(fn($k) => ['type' => 'dislike', 'label' => tag_label(interests(), $k)], $read['dislikes']),
@@ -320,7 +415,7 @@ function finder_recommend(array $c): array
 
     q('INSERT INTO finder_log (ip, gender, age, relation, budget_min, budget_max, note, source, results, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)', [
         client_ip(), $c['gender'], $c['age'], $c['relation'], $c['min'], $c['max'], $c['note'], $source,
-        implode(',', array_map(fn($i) => $i['id'], $items)), $now,
+        implode(',', array_map(fn($i) => $i['id'], $exactItems)), $now,
     ]);
     if ($source === 'jev' || jev_key() === '') {
         q('DELETE FROM finder_cache WHERE hash = ?', [$hash]);

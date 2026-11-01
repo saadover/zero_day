@@ -124,10 +124,15 @@ page_header('', ['active' => 'home', 'body' => 'home']);
             <button class="btn ghost small" type="button" data-finder-edit><?= e(t('res_retry')) ?></button>
         </div>
         <div class="understood" data-understood hidden><span class="tiny muted"><?= e(t('res_understood')) ?> :</span></div>
+        <p class="close-note" data-close-note hidden><?= e(t('res_close_none')) ?></p>
         <div class="podium" data-top></div>
         <div data-more-wrap hidden>
             <h3 class="h3"><?= e(t('res_more')) ?></h3>
             <div class="grid" data-more></div>
+        </div>
+        <div data-close-wrap hidden>
+            <h3 class="h3"><?= e(t('res_close')) ?></h3>
+            <div class="grid" data-close></div>
         </div>
         <p class="empty-note" data-none hidden><?= e(t('res_none')) ?></p>
     </div>

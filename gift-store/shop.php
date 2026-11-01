@@ -48,6 +48,41 @@ if (db()->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
 }
 $total = (int)q("SELECT COUNT(*) FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.active = 1 AND ($w)", $args)->fetchColumn();
 $products = products_query($w, $args, $order, $per, ($page - 1) * $per);
+
+// Nothing matches exactly: show the closest products instead of an empty page.
+$closest = [];
+if (!$total) $closest = shop_closest($qs, $category, $for, $occasion, $interest);
+
+function shop_closest(string $qs, ?array $category, string $for, string $occasion, string $interest): array
+{
+    require_once ROOT . '/inc/finder.php';
+    $gender = in_array($for, ['male', 'female'], true) ? $for : null;
+    $rows = q("SELECT p.*, c.name AS category, c.slug AS category_slug FROM products p LEFT JOIN categories c ON c.id = p.category_id
+               WHERE p.active = 1 AND (p.stock IS NULL OR p.stock > 0)" . ($gender ? " AND (p.gender = ? OR p.gender = 'unisex')" : ''), $gender ? [$gender] : [])->fetchAll();
+    // What the search is about: words, plus interests/occasions it mentions (FR/EN/Darija).
+    $read = $qs !== '' ? read_notes($qs) : ['likes' => [], 'occasions' => [], 'words' => []];
+    $words = array_filter(preg_split('/[^\p{L}\p{N}]+/u', norm_text($qs)), fn($x) => mb_strlen($x) >= 3);
+    $likes = array_unique(array_merge($read['likes'], $interest !== '' ? [$interest] : []));
+    $occs = array_unique(array_merge($read['occasions'], $occasion !== '' ? [$occasion] : []));
+    $scored = [];
+    foreach ($rows as $p) {
+        $s = 0;
+        $hay = norm_text($p['name'] . ' ' . $p['tags'] . ' ' . $p['category'] . ' ' . $p['description']);
+        foreach ($words as $w) if (mb_strpos($hay, $w) !== false || (mb_strlen($w) > 4 && mb_strpos($hay, mb_substr($w, 0, -1)) !== false)) $s += 3;
+        $s += 2.5 * count(array_intersect($likes, list_split($p['interests'])));
+        $s += 2 * count(array_intersect($occs, list_split($p['occasions'])));
+        if ($category && (int)$p['category_id'] === (int)$category['id']) $s += 1.5;
+        if ($s <= 0) continue;
+        $s += (int)$p['featured'] * 0.3;
+        $p['_s'] = $s;
+        $scored[] = $p;
+    }
+    usort($scored, fn($a, $b) => $b['_s'] <=> $a['_s']);
+    if (!$scored) { // still nothing: our favourites
+        $scored = array_values(array_filter($rows, fn($p) => (int)$p['featured'] === 1)) ?: $rows;
+    }
+    return hydrate_products(array_slice($scored, 0, 12));
+}
 $cats = q('SELECT * FROM categories ORDER BY sort, name')->fetchAll();
 
 $title = $qs !== '' ? t('results_for', ['q' => $qs]) : ($category['name'] ?? (isset(occasions()[$occasion]) ? tag_label(occasions(), $occasion) : ($for === 'male' ? t('for_him') : ($for === 'female' ? t('for_her') : t('shop_title')))));
@@ -57,7 +92,7 @@ page_header($title, ['active' => 'shop']);
 ?>
 <section class="page-head wrap">
     <h1 class="display small"><?= e($title) ?></h1>
-    <p class="muted"><?= e(t('n_products', ['n' => $total])) ?></p>
+    <?php if ($total): ?><p class="muted"><?= e(t('n_products', ['n' => $total])) ?></p><?php endif; ?>
 </section>
 
 <div class="filters-bar">
@@ -97,8 +132,11 @@ page_header($title, ['active' => 'shop']);
         </nav>
         <?php endif; ?>
     <?php else: ?>
-        <div class="empty-state">
-            <div class="empty-art"><?= icon('gift', 56) ?></div>
+        <div class="close-banner">
+            <span><?= icon('sparkle', 18) ?></span>
+            <p><?= e(t('shop_close')) ?></p>
+        </div>
+        <div class="grid"><?php foreach ($closest as $p) echo product_card($p); ?></div>
             <p><?= e(t('no_products')) ?></p>
             <a class="btn ghost" href="<?= e(url()) ?>#finder"><?= icon('sparkle', 18) ?> <?= e(t('cart_empty_cta')) ?></a>
         </div>

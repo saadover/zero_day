@@ -88,7 +88,7 @@ if (!tagging) return;
       .then(function (s) {
         if (s.error && !s.gender) throw new Error(s.error);
         apply(s);
-        statusEl.textContent = (s.source === "jev" ? "Rempli par Jev" : "Rempli par les règles automatiques (ajoutez la clé Jev pour plus de précision)") + " — vérifiez et corrigez si besoin, puis enregistrez.";
+        statusEl.textContent = (s.source === "ai" ? "Rempli automatiquement par l'IA" : "Rempli par les règles automatiques (ajoutez la clé API dans Réglages pour plus de précision)") + " — vérifiez et corrigez si besoin, puis enregistrez.";
       })
       .catch(function (e) { statusEl.textContent = "Impossible : " + e.message; })
       .then(function () { btn.disabled = false; tagging.classList.remove("thinking"); });

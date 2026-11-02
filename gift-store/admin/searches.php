@@ -24,7 +24,7 @@ admin_header('Recherches AI', 'searches');
         <td class="nowrap"><?= (int)$r['budget_min'] ?>–<?= (int)$r['budget_max'] >= 1e8 ? '∞' : (int)$r['budget_max'] ?> DH</td>
         <td><?= $r['note'] !== '' ? e($r['note']) : '<span class="muted">—</span>' ?></td>
         <td><?= $ids ? e(implode(' · ', array_map(fn($i) => $names[(int)$i] ?? '#' . $i, $ids))) : '<span class="st st-cancelled">Aucun résultat</span>' ?>
-            <?= $r['source'] === 'jev' ? '<span class="st st-confirmed">Jev</span>' : '' ?></td>
+            <?= in_array($r['source'], ['ai', 'jev'], true) ? '<span class="st st-confirmed">IA</span>' : '' ?></td>
         <td class="muted nowrap"><?= e(ago((int)$r['created_at'])) ?></td>
     </tr>
     <?php endforeach; ?>

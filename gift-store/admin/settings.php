@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $t0 = microtime(true);
             $r = jev_rate($cands, $c, $c['note']);
-            $test = ['ok' => true, 'msg' => 'Jev répond (' . round(microtime(true) - $t0, 1) . ' s). Notes pour un frère qui aime le foot et le café : ' . implode(', ', array_map(fn($p) => $p['name'] . ' ' . round(($r[(int)$p['id']] ?? 0) * 100) . '%', $cands))];
+            $test = ['ok' => true, 'msg' => 'L\'IA répond (' . round(microtime(true) - $t0, 1) . ' s). Notes pour un frère qui aime le foot et le café : ' . implode(', ', array_map(fn($p) => $p['name'] . ' ' . round(($r[(int)$p['id']] ?? 0) * 100) . '%', $cands))];
         } catch (Throwable $e) {
             $test = ['ok' => false, 'msg' => 'Échec : ' . $e->getMessage()];
         }
@@ -66,7 +66,7 @@ admin_header('Réglages', 'settings');
             <label><?= e($label) ?> <input type="<?= $type ?>" name="<?= $k ?>" value="<?= e(setting($k)) ?>" <?= $type === 'number' ? 'min="0" inputmode="numeric"' : '' ?>></label>
         <?php endforeach; ?>
     </div>
-    <h2>Conseiller cadeau — Jev (TypeSafe)</h2>
+    <h2>Conseiller cadeau — intelligence artificielle</h2>
     <p class="help">Collez votre clé API TypeSafe. Elle reste sur le serveur et n'est jamais envoyée aux visiteurs. Sans clé, le conseiller utilise ses règles intégrées (genre, âge, lien, budget et mots-clés en français, anglais et darija).</p>
     <label>Clé API <?= $key ? '<span class="st st-delivered">connectée · ••••' . e(substr($key, -4)) . '</span>' : '<span class="st st-cancelled">non configurée</span>' ?>
         <input type="password" name="jev_api_key" placeholder="<?= $key ? 'Laisser vide pour garder la clé actuelle' : 'ts_…' ?>" autocomplete="off">
@@ -74,7 +74,7 @@ admin_header('Réglages', 'settings');
     <?php if ($key): ?><label class="check"><input type="checkbox" name="clear_key" value="1"> Retirer la clé</label><?php endif; ?>
     <div class="actions">
         <button class="btn primary" name="action" value="save">Enregistrer</button>
-        <?php if ($key): ?><button class="btn" name="action" value="test">Tester Jev</button><?php endif; ?>
+        <?php if ($key): ?><button class="btn" name="action" value="test">Tester l'IA</button><?php endif; ?>
     </div>
 </form>
 

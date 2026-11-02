@@ -187,13 +187,13 @@ function jev_call(array $state, array $questions, int $timeout = 30): array
             sleep(1 << $attempt);
             continue;
         }
-        if ($res === false) throw new RuntimeException('Jev unreachable: ' . $err);
+        if ($res === false) throw new RuntimeException('AI service unreachable: ' . $err);
         if ($status === 401) throw new RuntimeException('TypeSafe rejected the API key.');
-        if ($status !== 200) throw new RuntimeException('Jev answered ' . $status . ': ' . substr((string)$res, 0, 200));
+        if ($status !== 200) throw new RuntimeException('AI service answered ' . $status . ': ' . substr((string)$res, 0, 200));
         break;
     }
     $answers = json_decode((string)$res, true)['answers'] ?? null;
-    if (!is_array($answers)) throw new RuntimeException('Jev answer unreadable');
+    if (!is_array($answers)) throw new RuntimeException('AI service answer unreadable');
     return $answers;
 }
 
@@ -264,7 +264,7 @@ function jev_rate(array $cands, array $c, string $note): array
         $u = jev_unit($answers['p' . $p['id']] ?? null);
         if ($u !== null) $out[(int)$p['id']] = $u;
     }
-    if (!$out) throw new RuntimeException('Jev rated nothing');
+    if (!$out) throw new RuntimeException('AI service rated nothing');
     return $out;
 }
 
@@ -357,7 +357,7 @@ function finder_recommend(array $c): array
     if (count($batch) > 1) {
         try {
             $jev = jev_rate($batch, $c, $c['note']);
-            $source = 'jev';
+            $source = 'ai';
         } catch (Throwable $e) {
             error_log('[finder] ' . $e->getMessage());
         }
@@ -417,7 +417,7 @@ function finder_recommend(array $c): array
         client_ip(), $c['gender'], $c['age'], $c['relation'], $c['min'], $c['max'], $c['note'], $source,
         implode(',', array_map(fn($i) => $i['id'], $exactItems)), $now,
     ]);
-    if ($source === 'jev' || jev_key() === '') {
+    if ($source === 'ai' || jev_key() === '') {
         q('DELETE FROM finder_cache WHERE hash = ?', [$hash]);
         q('INSERT INTO finder_cache (hash, response, created_at) VALUES (?, ?, ?)', [$hash, json_encode($res, JSON_UNESCAPED_UNICODE), $now]);
     }

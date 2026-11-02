@@ -17,7 +17,7 @@ admin_header('Tableau de bord', 'index');
 ?>
 <h1>Tableau de bord</h1>
 <?php if (!jev_key_set()): ?>
-    <div class="alert warn">Jev n'est pas encore connecté : le conseiller cadeau utilise ses règles intégrées. <a href="settings.php">Ajouter la clé TypeSafe →</a></div>
+    <div class="alert warn">L'IA n'est pas encore connectée : le conseiller cadeau utilise ses règles intégrées. <a href="settings.php">Ajouter la clé API →</a></div>
 <?php endif; ?>
 <?php if ($untagged): ?>
     <div class="alert warn"><?= $untagged ?> produit(s) sans centres d'intérêt ou occasions : le conseiller les recommande moins bien. <a href="products.php?untagged=1">Les compléter →</a></div>

@@ -4,7 +4,7 @@ An online gift shop with an AI gift advisor at the top of the home page.
 Visitors pick **him or her**, drag the **age** slider, choose **how they're
 related** (brother, mother, colleague, boss…), drag the **budget** slider and
 can describe the person in **English, French or Moroccan Darija** (Latin
-letters like `kaybghi lkora` or Arabic script). Jev (TypeSafe) then picks the
+letters like `kaybghi lkora` or Arabic script). The AI (TypeSafe) then picks the
 **top 3** gifts from your own products, plus more ideas below.
 
 Everything else is a normal store: browse by category, search, filter
@@ -33,8 +33,8 @@ You call the customer to confirm and get the exact address.
    les produits de démonstration" ticked to try the store straight away.
    The installer locks itself once it's done.
 4. **Log in** at `https://your-domain.ma/admin/`.
-5. **Connect Jev.** Admin → Réglages → paste your TypeSafe API key → Tester
-   Jev. The key stays on the server. Without a key, the advisor still works
+5. **Connect the AI.** Admin → Réglages → paste your TypeSafe API key → Tester
+   l'IA. The key stays on the server. Without a key, the advisor still works
    with its built-in rules.
 6. Turn on **SSL** in hPanel (free) so the site opens with `https://`.
 
@@ -42,7 +42,7 @@ You call the customer to confirm and get the exact address.
 
 Admin → Produits → Nouveau produit. Write the name and description: the
 **"Pour qui ?"** section then **fills itself** (gender, age range, who it
-suits, interests, occasions). With a Jev key, Jev reads the product and
+suits, interests, occasions). With an API key, the AI reads the product and
 answers ~50 small questions about it; without one, keyword rules do it. Check
 the result and change anything that's wrong before saving. The button
 "Remplir à partir du texte" runs it again after you edit the text. Age is
@@ -57,7 +57,7 @@ These tags are what the advisor uses:
 | Lien (père/mère, frère/sœur, collègue…) | **Strict rule.** Leave "Convient à tout le monde" ticked for gifts that suit anyone. |
 | Centres d'intérêt | Matched with what the visitor writes (football, café, lecture…). |
 | Occasions | Birthday, wedding, Eid, new baby, graduation… |
-| Mots-clés libres | Extra words Jev and the search can match. |
+| Mots-clés libres | Extra words the AI and the search can match. |
 
 Delete the demo products once yours are in (or hide them with the switch).
 
@@ -71,11 +71,11 @@ Delete the demo products once yours are in (or hide them with the switch).
    and understands negatives such as *"ma kaybghich l3tr"* or *"n'aime pas la
    musique"* so disliked things are pushed down. The page shows what it
    understood as chips (Football ✓, ~~Parfums~~).
-3. **Jev ranks the candidates:** one TypeSafe request
-   (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with a
+3. **The AI ranks the candidates:** one TypeSafe request
+   (`POST https://api.typesafe.ai/v1/systemone`, the TypeSafe model) with a
    **Score** question per product (up to 24), rating how good a gift it is for
    this person given the whole description in any language. The final score
-   is 78% Jev and 22% the tag match.
+   is 78% the AI score and 22% the tag match.
 4. **Never "nothing found":** when fewer than 6 products pass every rule,
    the closest ones are added (a bit over budget, made for a slightly
    different age, not aimed at that relationship), each with a label saying
@@ -85,7 +85,7 @@ Delete the demo products once yours are in (or hide them with the switch).
    products instead of an empty page.
 5. Identical searches are cached for 7 days (the cache resets whenever you
    edit the catalogue), and each visitor is limited to 20 searches per 10
-   minutes, to keep Jev costs low.
+   minutes, to keep AI costs low.
 
 Admin → Recherches AI lists what people asked for, including searches that
 found nothing, which shows you which gifts to add.
@@ -99,9 +99,9 @@ product.php          product page
 api/recommend.php    gift advisor endpoint
 api/order.php        quick order from the "Acheter" pop-up
 admin/suggest.php    automatic product tagging
-inc/autotag.php      tagging rules + the Jev tagging request
+inc/autotag.php      tagging rules + the AI tagging request
 admin/               admin panel
-inc/finder.php       advisor logic, closest matches and the Jev request
+inc/finder.php       advisor logic, closest matches and the AI request
 inc/taxonomy.php     relationships, interests, occasions + multilingual keywords, cities
 inc/i18n.php         interface text (fr / ar / en)
 assets/css/style.css design: colours and fonts are at the top (:root)

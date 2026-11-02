@@ -297,7 +297,7 @@
         '<div class="pick-body"><span class="card-cat">' + esc(p.category) + "</span><h3><a href=\"" + esc(p.url) + '">' + esc(p.name) + "</a></h3>" +
         (p.close ? gapsHtml(p) : '<ul class="reasons">' + p.reasons.map(function (r) { return "<li>" + ICON.check + "<span>" + esc(r) + "</span></li>"; }).join("") + "</ul>") +
         '<div class="pick-foot"><div class="price"><strong>' + esc(p.price_label) + "</strong>" + (p.compare_label ? " <s>" + esc(p.compare_label) + "</s>" : "") + "</div>" +
-        (window.__src === "jev" && !p.close ? '<span class="match"><span class="match-ring" style="--p:' + p.match + '"></span>' + p.match + "%</span>" : "") +
+        (window.__src === "ai" && !p.close ? '<span class="match"><span class="match-ring" style="--p:' + p.match + '"></span>' + p.match + "%</span>" : "") +
         "</div>" + buyBtn(p, "buy-btn") + "</div></article>";
     }
     function cardHtml(p) {
@@ -313,7 +313,7 @@
       window.__src = data.source;
       thinking.hidden = true; body.hidden = false;
       var src = $("[data-source-label]", body);
-      src.textContent = src.getAttribute(data.source === "jev" ? "data-jev" : "data-local");
+      src.textContent = src.getAttribute(data.source === "ai" ? "data-ai" : "data-local");
       var u = $("[data-understood]", body);
       $$(".u-chip", u).forEach(function (c) { c.remove(); });
       (data.understood || []).forEach(function (x, i) {

@@ -14,7 +14,7 @@ function autotag(string $name, string $desc, string $category, string $tags = ''
     $local = autotag_local($name, $desc, $category, $tags);
     if (jev_key() === '') return $local + ['source' => 'local'];
     try {
-        return autotag_jev($name, $desc, $category, $tags, $local) + ['source' => 'jev'];
+        return autotag_jev($name, $desc, $category, $tags, $local) + ['source' => 'ai'];
     } catch (Throwable $e) {
         error_log('[autotag] ' . $e->getMessage());
         return $local + ['source' => 'local', 'error' => $e->getMessage()];

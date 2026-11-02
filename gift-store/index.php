@@ -118,7 +118,7 @@ page_header('', ['active' => 'home', 'body' => 'home']);
     <div data-results-body hidden>
         <div class="results-head">
             <div>
-                <span class="kicker small"><span class="kicker-dot"></span><span data-source-label data-jev="<?= e(t('hero_kicker')) ?>" data-local="<?= e(t('res_local')) ?>"></span></span>
+                <span class="kicker small"><span class="kicker-dot"></span><span data-source-label data-ai="<?= e(t('hero_kicker')) ?>" data-local="<?= e(t('res_local')) ?>"></span></span>
                 <h2 class="h2"><?= e(t('res_title')) ?></h2>
             </div>
             <button class="btn ghost small" type="button" data-finder-edit><?= e(t('res_retry')) ?></button>

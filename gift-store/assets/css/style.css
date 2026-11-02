@@ -581,9 +581,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   .lead { font-size: 18px; }
   .finder { padding: 10px 28px 26px; }
 
-  .podium { grid-template-columns: 1.25fr 1fr 1fr; align-items: stretch; }
+  .podium { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
   .pick { grid-template-columns: 1fr; align-items: start; padding: 14px; }
-  .pick.first .pick-media { aspect-ratio: 1; }
   .pick h3 { font-size: 17px; }
 
   .grid { grid-template-columns: repeat(4, 1fr); gap: 34px 22px; }
@@ -669,3 +668,17 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 #results [data-close-wrap] { margin-top: 30px; }
 .close-banner { display: flex; gap: 10px; align-items: center; background: #fdf6e6; color: #7a5200; border-radius: 16px; padding: 12px 16px; margin-bottom: 20px; font-weight: 600; font-size: 14px; }
 .close-banner p { margin: 0; }
+
+/* Every product picture is a square of the same size, whatever the photo's shape. */
+.pick-media, .card-media { aspect-ratio: 1 / 1; width: 100%; }
+.pick-media img, .card-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pick-media::after, .card-media::after { content: ""; display: block; padding-top: 100%; } /* older browsers without aspect-ratio */
+@supports (aspect-ratio: 1) { .pick-media::after, .card-media::after { display: none; } }
+.pick { align-content: start; }
+.pick-body { display: flex; flex-direction: column; min-width: 0; }
+@media (min-width: 960px) {
+  .pick { display: flex; flex-direction: column; align-items: stretch; }
+  .pick-body { flex: 1; }
+  .pick-body .buy-btn { margin-top: auto; }
+  .pick-foot { margin-bottom: 12px; }
+}

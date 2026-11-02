@@ -195,7 +195,8 @@ function hydrate_products(array $rows): array
     $in = implode(',', array_fill(0, count($ids), '?'));
     $imgs = [];
     foreach (q("SELECT product_id, path FROM product_images WHERE product_id IN ($in) ORDER BY sort, id", $ids)->fetchAll() as $i) {
-        $imgs[(int)$i['product_id']][] = $i['path'];
+        $path = image_path($i['path']);
+        if ($path !== null) $imgs[(int)$i['product_id']][] = $path;
     }
     foreach ($rows as &$r) {
         $r['images'] = $imgs[(int)$r['id']] ?? [];
@@ -203,6 +204,15 @@ function hydrate_products(array $rows): array
         $r['url'] = url('product.php', ['p' => $r['slug']]);
     }
     return $rows;
+}
+
+// The stored image path if the file is really there, so a missing photo never
+// shows as a broken image. Demo pictures ship in assets/img/demo/.
+function image_path(string $path): ?string
+{
+    if (preg_match('~^https?://~', $path)) return $path;
+    if (str_starts_with($path, 'uploads/demo/')) $path = 'assets/img/demo/' . basename($path);
+    return is_file(ROOT . '/' . $path) ? $path : null;
 }
 
 function img_url(string $path): string

@@ -110,10 +110,18 @@ function demo_svg(string $icon, int $seed): string
         . '<g fill="none" stroke="' . $ink . '" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">' . $art . '</g></svg>';
 }
 
+// Writes every demo picture into assets/img/demo/ (run once by the developer;
+// the files are committed so they upload with the site).
+function build_demo_images(): void
+{
+    $cats = demo_categories();
+    foreach (demo_products() as $n => $p) {
+        file_put_contents(ROOT . '/assets/img/demo/' . slugify($p[0]) . '.svg', demo_svg($cats[$p[1]][1], $n));
+    }
+}
+
 function seed_demo(PDO $pdo): void
 {
-    $dir = ROOT . '/uploads/demo';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
     $catIds = [];
     $icons = [];
     $sort = 0;
@@ -139,8 +147,8 @@ function seed_demo(PDO $pdo): void
         $pdo->prepare('INSERT INTO products (name, slug, description, price, compare_price, stock, category_id, gender, age_min, age_max, relations, interests, occasions, tags, featured, active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)')
             ->execute([$name, $slug, $desc, $price, $compare, null, $catIds[$cat], $gender, $amin, $amax, $rel, $int, $occ, $tags, $feat, $now - $n * 3600, $now - $n * 3600]);
         $pid = (int)$pdo->lastInsertId();
-        $file = 'uploads/demo/' . $slug . '.svg';
-        file_put_contents(ROOT . '/' . $file, demo_svg($icons[$cat], $n));
+        $file = 'assets/img/demo/' . $slug . '.svg'; // shipped with the site (see build_demo_images)
+        if (!is_file(ROOT . '/' . $file) && is_writable(dirname(ROOT . '/' . $file))) file_put_contents(ROOT . '/' . $file, demo_svg($icons[$cat], $n));
         $pdo->prepare('INSERT INTO product_images (product_id, path, sort) VALUES (?, ?, 0)')->execute([$pid, $file]);
     }
 }

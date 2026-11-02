@@ -144,7 +144,7 @@ function page_footer(array $opt = []): void
     <button class="icon-btn modal-x" type="button" data-qb-close aria-label="Close"><?= icon('close') ?></button>
     <form class="qb" data-qb-form novalidate>
         <div class="qb-product">
-            <img src="" alt="" data-qb-img width="72" height="72">
+            <img src="<?= e(url('assets/img/demo/placeholder.svg')) ?>" alt="" data-qb-img width="72" height="72">
             <div>
                 <h2 id="qb-title" data-qb-name></h2>
                 <div class="qb-price"><strong data-qb-price></strong></div>

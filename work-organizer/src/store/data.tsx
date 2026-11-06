@@ -10,7 +10,7 @@ type DB = { [K in TableName]: Tables[K][] };
 const TABLES: TableName[] = [
   'profiles', 'tags', 'tasks', 'task_assignees', 'task_tags', 'subtasks', 'task_blockers',
   'meetings', 'meeting_actions', 'meeting_tasks', 'attachments', 'checklist_items',
-  'checklist_checks', 'notifications', 'routines', 'routine_runs', 'processes', 'role_permissions',
+  'checklist_checks', 'notifications', 'routines', 'routine_runs', 'processes', 'role_permissions', 'knowledge',
 ];
 
 const KEYS: Record<TableName, string[]> = {
@@ -20,6 +20,7 @@ const KEYS: Record<TableName, string[]> = {
   checklist_items: ['id'], checklist_checks: ['item_id', 'day'], notifications: ['id'],
   routines: ['id'], routine_runs: ['routine_id', 'day'], processes: ['id'],
   role_permissions: ['role', 'perm'],
+  knowledge: ['id'],
 };
 
 const NOT_ALLOWED = 'Your access level doesn’t allow this. Ask an admin if you need it.';

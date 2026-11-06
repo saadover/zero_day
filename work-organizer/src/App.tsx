@@ -12,6 +12,7 @@ import type { Routine } from './lib/types';
 import { firstName } from './components/Atoms';
 import { RoutinesPage } from './pages/Routines';
 import { ProcessesPage, ProcessPage } from './pages/Processes';
+import { KnowledgePage } from './pages/Knowledge';
 const HistoryPage = lazy(() => import('./pages/History').then((m) => ({ default: m.HistoryPage })));
 const ExportPage = lazy(() => import('./pages/Export').then((m) => ({ default: m.ExportPage })));
 import { useToast } from './components/Toast';
@@ -181,6 +182,7 @@ function Workspace() {
         <Route path="/checklist" element={<ChecklistPage />} />
         <Route path="/reminders" element={<RoutinesPage />} />
         <Route path="/processes" element={<ProcessesPage />} />
+        <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/history" element={<Suspense fallback={<div className="page"><div className="empty">Loading…</div></div>}><HistoryPage /></Suspense>} />
         <Route path="/export" element={<Suspense fallback={<div className="page"><div className="empty">Loading…</div></div>}><ExportPage /></Suspense>} />
         <Route path="/processes/:id" element={<ProcessPage />} />

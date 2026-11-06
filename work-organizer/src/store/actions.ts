@@ -70,12 +70,12 @@ export function useActions() {
   }, [ensureTags, taskById, insert]);
 
   /** Upload a PDF, Word document or an (already compressed) image. */
-  const uploadPdf = useCallback(async (file: File, owner: { task_id?: string; meeting_id?: string; routine_id?: string }) => {
+  const uploadPdf = useCallback(async (file: File, owner: { task_id?: string; meeting_id?: string; routine_id?: string; knowledge_id?: string }) => {
     const doc = isPdf(file) || isWord(file);
     if (!doc && !isImage(file)) throw new Error('Only PDFs, Word documents and images can be attached.');
     if (file.size > 10 * 1024 * 1024) throw new Error('Files must be 10 MB or smaller.');
     const safe = file.name.replace(/[^\w.\- ]+/g, '_');
-    const path = `${owner.task_id ?? owner.meeting_id ?? owner.routine_id}/${crypto.randomUUID()}-${safe}`;
+    const path = `${owner.task_id ?? owner.meeting_id ?? owner.routine_id ?? owner.knowledge_id}/${crypto.randomUUID()}-${safe}`;
     const contentType = doc ? docType(file) : file.type || 'image/webp';
     const { error } = await supabase.storage.from('attachments').upload(path, file, { contentType });
     if (error) throw error;

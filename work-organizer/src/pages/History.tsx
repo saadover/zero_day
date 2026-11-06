@@ -27,6 +27,7 @@ const AREAS: { id: string; label: string; kinds: string[] }[] = [
   { id: '', label: 'Everything', kinds: [] },
   { id: 'tasks', label: 'Tasks', kinds: ['tasks', 'subtasks', 'task_assignees', 'task_tags', 'task_blockers', 'attachments'] },
   { id: 'processes', label: 'Processes', kinds: ['processes'] },
+  { id: 'knowledge', label: 'Knowledge base', kinds: ['knowledge'] },
   { id: 'meetings', label: 'Meetings', kinds: ['meetings', 'meeting_actions', 'meeting_tasks'] },
   { id: 'checklist', label: 'Checklist', kinds: ['checklist_items', 'checklist_checks'] },
   { id: 'reminders', label: 'Reminders', kinds: ['routines', 'routine_runs'] },
@@ -44,6 +45,7 @@ const FIELD: Record<string, string> = {
   starts_at: 'Date', attendees: 'Attendees', agenda: 'Agenda', decisions: 'Decisions', text: 'Text',
   at_time: 'Time', days: 'Days', outline: 'Steps', scene: 'Drawing', view: 'View', visibility: 'Visibility',
   owner_id: 'Owner', full_name: 'Name', email: 'Email', role: 'Access', allowed: 'Allowed',
+  question: 'Question', answer: 'Answer', tags: 'Tags', source: 'Source',
   claimed_by: 'Picked up by', done_by: 'Done by', task_id: 'Task',
 };
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -166,6 +168,7 @@ export function HistoryPage() {
       case 'processes':
         if (r.action === 'update' && keys.length === 1 && keys[0] === 'scene') return { text: <>edited the drawing of process {T(r.title)}</>, showChanges: false };
         return { text: <>{verb} {r.details === 'private' ? 'private ' : ''}process {T(r.title)}</>, showChanges: true };
+      case 'knowledge': return { text: <>{{ insert: 'added', update: 'edited', delete: 'deleted' }[r.action as 'insert']} knowledge question {T(r.title)}</>, showChanges: r.action === 'update' };
       case 'tags': return { text: <>{verb} tag {T(r.title)}</>, showChanges: true };
       case 'profiles':
         if (r.action === 'insert') return { text: <>added {T(r.title)} to the team</>, showChanges: false };

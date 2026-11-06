@@ -4,7 +4,7 @@ import { VIEWS } from '../lib/tasks';
 import { useData } from '../store/data';
 import { useOpenTask, useUi } from '../store/ui';
 import {
-  IconBoard, IconCalendar, IconChecklist, IconGrid, IconHome, IconList, IconMoon, IconNotes, IconPlus, IconSettings,
+  IconBoard, IconBook, IconCalendar, IconChecklist, IconGrid, IconHome, IconList, IconMoon, IconNotes, IconPlus, IconSettings,
   IconUsers, StatusIcon,
 } from './Icons';
 import { applyTheme } from './theme';
@@ -37,6 +37,8 @@ function Palette({ close }: { close: () => void }) {
       { id: 'check', label: 'Go to Daily checklist', icon: <IconChecklist />, run: go('/checklist') },
       { id: 'rem', label: 'Go to Reminders', icon: <IconChecklist />, run: go('/reminders'), keywords: 'repeating daily routine alarm' },
       { id: 'proc', label: 'Go to Processes', icon: <IconBoard />, run: go('/processes'), keywords: 'diagram flowchart mind map tree' },
+      { id: 'kb', label: 'Go to Knowledge base', icon: <IconBook />, run: go('/knowledge'), keywords: 'questions answers faq how to' },
+      ...db.knowledge.map((k) => ({ id: `k-${k.id}`, label: `Q: ${k.question}`, icon: <IconBook />, run: go(`/knowledge?id=${k.id}`), keywords: `${k.tags.join(' ')} ${k.answer.slice(0, 300)}` })),
       ...db.processes.map((p) => ({ id: `p-${p.id}`, label: `Process: ${p.title}`, icon: <IconBoard />, run: go(`/processes/${p.id}`), keywords: p.outline.slice(0, 200) })),
       { id: 'meet', label: 'Go to Meetings', icon: <IconNotes />, run: go('/meetings') },
       { id: 'team', label: 'Go to Team tasks', icon: <IconUsers />, run: go('/team/list'), keywords: 'everyone colleagues' },
@@ -51,7 +53,7 @@ function Palette({ close }: { close: () => void }) {
       } },
     ];
     return cmds;
-  }, [nav, openQuickAdd, me, update, db.processes]);
+  }, [nav, openQuickAdd, me, update, db.processes, db.knowledge]);
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();

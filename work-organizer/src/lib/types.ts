@@ -17,7 +17,7 @@ export const ROLE_INFO: Record<Role, { label: string; hint: string }> = {
 export type Perm =
   | 'task_create' | 'task_edit' | 'task_status' | 'task_delete' | 'files_upload'
   | 'checklist_tick' | 'checklist_manage' | 'meeting_edit' | 'routine_do' | 'routine_manage'
-  | 'process_edit' | 'tags_manage' | 'export';
+  | 'process_edit' | 'knowledge_edit' | 'tags_manage' | 'export';
 export const PERMS: { group: string; items: { id: Perm; label: string; hint?: string }[] }[] = [
   { group: 'Tasks', items: [
     { id: 'task_create', label: 'Create tasks' },
@@ -36,6 +36,7 @@ export const PERMS: { group: string; items: { id: Perm; label: string; hint?: st
     { id: 'routine_manage', label: 'Create, edit & delete repeating reminders' },
   ] },
   { group: 'Processes', items: [{ id: 'process_edit', label: 'Create, edit & delete processes' }] },
+  { group: 'Knowledge base', items: [{ id: 'knowledge_edit', label: 'Add, edit & delete questions and answers' }] },
   { group: 'Other', items: [
     { id: 'tags_manage', label: 'Rename, recolour & delete tags' },
     { id: 'export', label: 'Export (PDF, Excel, images)' },
@@ -154,6 +155,7 @@ export interface Attachment {
   task_id: string | null;
   meeting_id: string | null;
   routine_id?: string | null;
+  knowledge_id?: string | null;
   name: string;
   size: number;
   path: string;
@@ -227,6 +229,19 @@ export interface Process {
   updated_at: string;
 }
 
+export interface Knowledge {
+  id: string;
+  question: string;
+  answer: string;
+  tags: string[];
+  /** where it came from, e.g. "BDM in the Teams group" */
+  source: string;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tables {
   profiles: Profile;
   tags: Tag;
@@ -246,6 +261,7 @@ export interface Tables {
   routine_runs: RoutineRun;
   processes: Process;
   role_permissions: RolePermission;
+  knowledge: Knowledge;
 }
 
 export type TableName = keyof Tables;

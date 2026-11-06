@@ -10,7 +10,7 @@ import { useOpenTask, useUi } from '../store/ui';
 import { Avatar, Avatars } from './Atoms';
 import { CommandPalette } from './CommandPalette';
 import {
-  IconBell, IconBoard, IconClock, IconDownload, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
+  IconBell, IconBoard, IconBook, IconClock, IconDownload, IconCalendar, IconChecklist, IconFlag, IconGrid, IconHome, IconList, IconLogout, IconMenu, IconNotes, IconPlus,
   IconSearch, IconSettings, IconUsers,
 } from './Icons';
 import { Popover, useAnchor } from './Popover';
@@ -149,6 +149,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Nav to="/reminders" icon={<IconBell />} label="Reminders" count={todaysRoutines || ''} />
         <Nav to="/meetings" icon={<IconNotes />} label="Meetings" />
         <Nav to="/processes" icon={<IconBoard />} label="Processes" count={db.processes.length || ''} />
+        <Nav to="/knowledge" icon={<IconBook />} label="Knowledge base" count={db.knowledge.length || ''} />
 
         <div className="side-label">Team</div>
         <Nav to="/team/list" icon={<IconUsers />} label="Team tasks" count={tasks.filter((x) => x.status !== 'Done').length} />

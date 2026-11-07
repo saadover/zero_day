@@ -30,5 +30,16 @@ expect('serverless api ok', { n: [['u', 'users'], ['a', 'apigw'], ['l', 'lambda'
 expect('beginner: users -> ec2 -> rds, no VPC boxes', { simple: true, n: [['u', 'users'], ['e', 'ec2'], ['d', 'rds']], e: [['u', 'e'], ['e', 'd']] }, null);
 expect('beginner: users -> rds still fails', { simple: true, n: [['u', 'users'], ['d', 'rds']], e: [['u', 'd']] }, 'never exposed');
 expect('beginner: users -> ecs needs a load balancer', { simple: true, n: [['u', 'users'], ['c', 'ecs']], e: [['u', 'c']] }, 'load balancer');
+// AZ boxes: an ALB drawn across both public subnets counts as 2 AZs; a lone EC2 in one AZ box counts as 1
+{
+  const N = (id, svc, x, y, w, h, props) => ({ id, svc, x, y, w, h, props: Object.assign(S.defaultProps(svc), props || {}) });
+  const nodes = [N('R', 'region', 0, 0, 1000, 640, { region: 'secondary' }), N('V', 'vpc', 30, 50, 940, 560), N('A', 'az', 60, 100, 420, 480), N('B', 'az', 520, 100, 420, 480),
+    N('pa', 'pubsubnet', 80, 150, 380, 160), N('qa', 'privsubnet', 80, 340, 380, 220), N('pb', 'pubsubnet', 540, 150, 380, 160), N('qb', 'privsubnet', 540, 340, 380, 220),
+    N('alb', 'alb', 440, 190, 0, 0, { azs: 1 }), N('e1', 'ec2', 200, 360), N('d1', 'rds', 200, 470), N('d2', 'rds', 660, 470)];
+  const pl = S.computePlacement(nodes), az = S.effectiveAzs(nodes, pl);
+  const ok = az.alb === 2 && az.e1 === 1 && az.d1 === 2 && pl.e1.subnet === 'private' && pl.alb.subnet === 'public' && pl.e1.region === 'secondary';
+  console.log((ok ? 'ok  ' : 'FAIL') + ' AZ and Region boxes', JSON.stringify(az), pl.e1.region);
+  if (!ok) fails++;
+}
 console.log(fails ? fails + ' failed' : 'all rule checks passed');
 process.exit(fails ? 1 : 0);

@@ -5,6 +5,11 @@ find out whether it would actually work. Nothing is created in AWS: the
 simulation runs entirely in your browser.
 
 - **157 services** in 17 categories, drawn with the official AWS architecture icons.
+- **Region, VPC, Availability Zone and subnet boxes**, nested like real AWS
+  diagrams. "+ Ready-made network" (under Network boxes) adds a Region, a VPC,
+  2 AZs with a public and a private subnet each, and an Internet Gateway in one
+  click. A service drawn in two AZ boxes counts as highly available; a load
+  balancer drawn across both public subnets counts as spanning 2 AZs.
 - **VPC, public subnet and private subnet boxes.** Drop servers, containers,
   databases and load balancers inside them; placement matters (an EC2 instance
   in a private subnet is not reachable from the internet, a private subnet needs

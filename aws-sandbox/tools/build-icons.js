@@ -15,6 +15,7 @@ for (const sv of S.SERVICE_LIST) {
   const ref = sv.icon;
   if (out[ref]) continue;
   const [k, name] = ref.split(':');
+  if (k === 'x') continue; // drawn by the app itself
   const file = path.join(src, DIRS[k], name + '.svg');
   if (!fs.existsSync(file)) { console.error('missing', ref, 'for', sv.id); missing++; continue; }
   let svg = fs.readFileSync(file, 'utf8')

@@ -57,6 +57,8 @@
   s('developer', 'Developers', 'Developers', 'clients', ['client', 'dev'], 'r:User', { start: 1, global: 1 }, 'Your engineering team pushing code and managing the account.');
 
   // ---------- Network boxes ----------
+  s('region', 'Region', 'Region', 'groups', ['regionbox'], 'g:Region', { group: 1 }, 'An AWS Region such as us-east-1. Everything inside the box runs in that region. Choose the region in the inspector.');
+  s('az', 'Availability Zone', 'Availability Zone', 'groups', ['azbox'], 'x:az', { group: 1 }, 'One data center group inside a region. Put subnets inside it. A subnet always lives in exactly one AZ; draw the same service in two AZ boxes to make it highly available.');
   s('vpc', 'VPC', 'VPC', 'groups', ['vpcbox'], 'g:VirtualprivatecloudVPC', { group: 1 }, 'Your private network in a region. Draw it as a box and put subnets inside it.');
   s('pubsubnet', 'Public subnet', 'Public subnet', 'groups', ['subnetbox'], 'g:Publicsubnet', { group: 1, subnet: 'public' }, 'A subnet with a route to an Internet Gateway. Load balancers and NAT gateways go here.');
   s('privsubnet', 'Private subnet', 'Private subnet', 'groups', ['subnetbox'], 'g:Privatesubnet', { group: 1, subnet: 'private' }, 'A subnet with no direct internet route. App servers and databases belong here.');

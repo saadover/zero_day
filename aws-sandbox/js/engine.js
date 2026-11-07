@@ -168,10 +168,16 @@
   }
   S.nodeCenter = nodeCenter;
 
+  // Custom icon for the Availability Zone box (AWS draws AZs as a dashed outline).
+  S.ICONS = S.ICONS || {};
+  S.ICONS['x:az'] = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#147eba"/><rect x="7" y="9" width="26" height="22" rx="2" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="4 3"/><text x="20" y="24.5" fill="#fff" font-family="Arial,sans-serif" font-size="11" font-weight="700" text-anchor="middle">AZ</text></svg>';
+
   function computePlacement(nodes) {
     const groups = nodes.filter((n) => SV()[n.svc] && SV()[n.svc].group);
     const vpcs = groups.filter((g) => g.svc === 'vpc');
-    const subnets = groups.filter((g) => g.svc !== 'vpc');
+    const subnets = groups.filter((g) => g.svc === 'pubsubnet' || g.svc === 'privsubnet');
+    const regionBoxes = groups.filter((g) => g.svc === 'region');
+    const azBoxes = groups.filter((g) => g.svc === 'az');
     const area = (g) => (g.w || 300) * (g.h || 200);
     const place = {};
     function smallestContaining(list, x, y, pad) {
@@ -179,12 +185,20 @@
       list.forEach((g) => { if (inRect(x, y, groupRect(g), pad) && (!best || area(g) < area(best))) best = g; });
       return best;
     }
+    const regionAt = (x, y) => { const r = smallestContaining(regionBoxes, x, y, 0); return r ? (r.props.region || 'primary') : null; };
+    const azAt = (x, y) => { const a = smallestContaining(azBoxes, x, y, 0); return a ? a.id : null; };
+    regionBoxes.forEach((r) => { place[r.id] = { vpc: null, subnet: null, region: r.props.region || 'primary' }; });
+    vpcs.forEach((v) => { const [cx, cy] = nodeCenter(v); place[v.id] = { vpc: v.id, subnet: null, region: regionAt(cx, cy) || v.props.region || 'primary' }; });
+    azBoxes.forEach((a) => {
+      const [cx, cy] = nodeCenter(a);
+      const v = smallestContaining(vpcs, cx, cy, 0);
+      place[a.id] = { vpc: v ? v.id : null, subnet: null, region: v ? place[v.id].region : (regionAt(cx, cy) || 'primary') };
+    });
     subnets.forEach((sn) => {
       const [cx, cy] = nodeCenter(sn);
       const v = smallestContaining(vpcs, cx, cy, 0);
-      place[sn.id] = { vpc: v ? v.id : null, subnet: null, region: v ? (v.props.region || 'primary') : 'primary' };
+      place[sn.id] = { vpc: v ? v.id : null, subnet: null, az: azAt(cx, cy), region: v ? place[v.id].region : (regionAt(cx, cy) || 'primary') };
     });
-    vpcs.forEach((v) => { place[v.id] = { vpc: v.id, subnet: null, region: v.props.region || 'primary' }; });
     nodes.forEach((n) => {
       const sv = SV()[n.svc];
       if (!sv || sv.group) return;
@@ -192,22 +206,52 @@
       const sn = smallestContaining(subnets, cx, cy, 0);
       let v = sn ? (place[sn.id].vpc && vpcs.find((x) => x.id === place[sn.id].vpc)) : null;
       if (!v) v = smallestContaining(vpcs, cx, cy, n.svc === 'igw' ? 50 : 0);
-      const subnetType = sn ? SV()[sn.svc].subnet : null;
-      const region = sv.global ? 'global' : v ? (v.props.region || 'primary') : (n.props.region || 'primary');
-      place[n.id] = { vpc: v ? v.id : null, subnet: subnetType, subnetId: sn ? sn.id : null, region };
+      let subnetType = sn ? SV()[sn.svc].subnet : null;
+      let spanAzs = null;
+      if (!sn && v && sv.vpc) {
+        // drawn across subnets (typical for a load balancer spanning two AZs)
+        const box = { x: n.x - 34, y: n.y - 10, w: NODE.w + 68, h: NODE.icon + 20 };
+        const hits = subnets.filter((g) => place[g.id].vpc === v.id && g.x < box.x + box.w && g.x + g.w > box.x && g.y < box.y + box.h && g.y + g.h > box.y);
+        if (hits.length) {
+          subnetType = hits.every((g) => g.svc === 'pubsubnet') ? 'public' : hits.every((g) => g.svc === 'privsubnet') ? 'private' : SV()[hits[0].svc].subnet;
+          spanAzs = new Set(hits.map((g) => place[g.id].az || g.id)).size;
+        }
+      }
+      const region = sv.global ? 'global' : v ? place[v.id].region : (regionAt(cx, cy) || n.props.region || 'primary');
+      const az = azAt(cx, cy) || (sn ? place[sn.id].az : null);
+      place[n.id] = { vpc: v ? v.id : null, subnet: subnetType, subnetId: sn ? sn.id : null, region, az, spanAzs, regionFromBox: !sv.global && !v && !!regionAt(cx, cy) };
     });
     return place;
   }
   S.computePlacement = computePlacement;
 
+  // When services are drawn inside AZ boxes, the AZ count comes from the drawing:
+  // the number of different AZ boxes that hold the same kind of service in the same VPC.
+  S.effectiveAzs = function (nodes, place) {
+    const out = {};
+    nodes.forEach((n) => {
+      const s = SV()[n.svc];
+      if (!s || s.group || s.ha !== 'azs') return;
+      const p = place[n.id];
+      if (p && p.spanAzs) { out[n.id] = Math.min(3, p.spanAzs); return; }
+      if (!p || !p.az) return;
+      const zones = new Set();
+      nodes.forEach((m) => { const q = place[m.id]; if (m.svc === n.svc && q && q.az && q.vpc === p.vpc && q.region === p.region) zones.add(q.az); });
+      out[n.id] = Math.min(3, zones.size);
+    });
+    return out;
+  };
+
   // ---------- main evaluation ----------
   S.evaluate = function (graph, opts) {
     opts = opts || {};
     const strict = !!opts.strict;
-    const nodes = graph.nodes.filter((n) => SV()[n.svc]);
+    const rawNodes = graph.nodes.filter((n) => SV()[n.svc]);
+    const place = computePlacement(rawNodes);
+    const azFromBoxes = S.effectiveAzs(rawNodes, place);
+    const nodes = rawNodes.map((n) => (azFromBoxes[n.id] ? Object.assign({}, n, { props: Object.assign({}, n.props, { azs: azFromBoxes[n.id] }) }) : n));
     const byId = {}; nodes.forEach((n) => { byId[n.id] = n; });
     const edges = graph.edges.filter((e) => byId[e.from] && byId[e.to]);
-    const place = computePlacement(nodes);
     const sv = (n) => SV()[n.svc];
     // Beginner mode: anything that needs a network but isn't in a VPC box runs in
     // AWS's default VPC, whose subnets are public. No VPC boxes needed.
@@ -305,7 +349,7 @@
       issue('warn', 'Regional services drawn inside the VPC', misplaced.map(name).join(', ') + ' are managed regional services. They don\'t live in your subnets; your VPC reaches them through endpoints, a NAT gateway or the internet gateway.',
         'Move them outside the VPC box.', misplaced.map((n) => n.id));
     }
-    const subnetsOutside = nodes.filter((n) => sv(n).group && n.svc !== 'vpc' && !place[n.id].vpc);
+    const subnetsOutside = nodes.filter((n) => sv(n).tags.includes('subnetbox') && !place[n.id].vpc);
     if (subnetsOutside.length) issue(netLevel, 'Subnet outside a VPC', 'Subnets always belong to a VPC.', 'Drag the subnet box inside a VPC box.', subnetsOutside.map((n) => n.id));
 
     // --- public subnets need IGW ---
@@ -322,7 +366,7 @@
 
     // ALB in at least 2 AZs
     real.filter((n) => n.svc === 'alb' && (n.props.azs || 1) < 2).forEach((n) =>
-      issue('error', name(n) + ' needs at least 2 Availability Zones', 'AWS won\'t create an Application Load Balancer unless you give it subnets in two or more AZs.', 'Set Availability Zones to 2 or 3 in the inspector.', [n.id]));
+      issue('error', name(n) + ' needs at least 2 Availability Zones', 'AWS won\'t create an Application Load Balancer unless you give it subnets in two or more AZs.', place[n.id].az ? 'Draw the load balancer across both AZ boxes (its center on the line between them, outside any single AZ), or move it out of the AZ box and set Availability Zones to 2.' : 'Set Availability Zones to 2 or 3 in the inspector.', [n.id]));
 
     // NAT must be in a public subnet
     real.filter((n) => n.svc === 'nat' && place[n.id].vpc && place[n.id].subnet !== 'public').forEach((n) =>

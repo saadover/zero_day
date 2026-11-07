@@ -109,7 +109,9 @@
       const items = S.SERVICE_LIST.filter((s) => s.cat === cat && (!f || (s.name + ' ' + s.short + ' ' + s.id + ' ' + s.desc + ' ' + s.tags.join(' ')).toLowerCase().includes(f)));
       if (!items.length) return;
       const open = f || OPEN_CATS.includes(cat);
-      html += '<details class="pal-cat"' + (open ? ' open' : '') + '><summary><span class="dot" style="background:' + S.CATS[cat].color + '"></span>' + esc(S.CATS[cat].name) + '<span class="count">' + items.length + '</span></summary><div class="pal-grid">';
+      html += '<details class="pal-cat"' + (open ? ' open' : '') + '><summary><span class="dot" style="background:' + S.CATS[cat].color + '"></span>' + esc(S.CATS[cat].name) + '<span class="count">' + items.length + '</span></summary>' +
+        (cat === 'groups' ? '<button type="button" class="kit-btn" id="btnKit"><b>+ Ready-made network</b><span>Region › VPC › 2 Availability Zones, each with a public and a private subnet, plus an Internet Gateway</span></button>' : '') +
+        '<div class="pal-grid">';
       items.forEach((s) => {
         html += '<button type="button" class="pal-item" data-svc="' + s.id + '">' + iconHTML(s.id) + '<span>' + esc(s.short) + '</span></button>';
       });
@@ -161,8 +163,11 @@
 
   // ---------- rendering ----------
   function nodeSub(n) {
-    const sv = SV[n.svc], p = n.props || {};
+    const sv = SV[n.svc];
+    let p = n.props || {};
     const bits = [];
+    const eff = state.effAzs && state.effAzs[n.id];
+    if (eff) p = Object.assign({}, p, { azs: eff });
     if (n.svc === 'aurora') bits.push((p.azs || 1) === 1 ? 'writer only' : 'writer + ' + ((p.azs || 1) - 1) + ' replica' + ((p.azs || 1) > 2 ? 's' : ''));
     else if (sv.ha === 'azs') bits.push((p.azs || 1) + ' AZ');
     if (n.svc === 's3' && p.access !== 'private') bits.push(p.access === 'website' ? 'website' : 'presigned');
@@ -185,6 +190,7 @@
 
   function render() {
     state.placement = S.computePlacement(state.graph.nodes);
+    state.effAzs = S.effectiveAzs(state.graph.nodes, state.placement);
     const flags = issueFlags();
     // groups (largest first so smaller ones sit on top)
     const groups = state.graph.nodes.filter((n) => SV[n.svc].group).sort((a, b) => b.w * b.h - a.w * a.h);
@@ -193,7 +199,8 @@
       const sv = SV[n.svc];
       const sel = state.sel && state.sel.type === 'node' && state.sel.id === n.id;
       const label = n.props.label || sv.name;
-      const reg = n.svc === 'vpc' ? '<em>' + esc(S.REGIONS[n.props.region || 'primary'].split(' ')[0]) + '</em>' : '';
+      const regKey = n.svc === 'region' ? (n.props.region || 'primary') : n.svc === 'vpc' ? (state.placement[n.id] || {}).region || n.props.region || 'primary' : null;
+      const reg = regKey ? '<em>' + esc(n.svc === 'region' ? S.REGIONS[regKey] : S.REGIONS[regKey].split(' ')[0]) + '</em>' : '';
       gh += '<div class="group ' + n.svc + (sel ? ' selected' : '') + (flags.err.has(n.id) ? ' err' : '') + '" data-id="' + n.id + '" style="left:' + n.x + 'px;top:' + n.y + 'px;width:' + n.w + 'px;height:' + n.h + 'px">' +
         '<div class="group-head" data-drag="group">' + iconHTML(n.svc) + '<span>' + esc(label) + '</span>' + reg + '</div>' +
         '<div class="resize" data-drag="resize" title="Resize"></div></div>';
@@ -346,24 +353,37 @@
     let h = '<div class="insp-head">' + iconHTML(n.svc) + '<div><h2>' + esc(sv.name) + '</h2><div class="cat">' + esc(S.CATS[sv.cat].name) + '</div></div></div><p>' + esc(sv.desc) + '</p>';
     h += '<div class="field"><label for="f-label">Label</label><input type="text" id="f-label" data-prop="label" value="' + esc(n.props.label || '') + '" placeholder="' + esc(sv.short) + '"></div>';
     if (sv.group) {
-      if (n.svc === 'vpc') h += selectField('f-region', 'Region', 'region', n.props.region || 'primary', Object.keys(S.REGIONS).map((k) => [k, S.REGIONS[k]]));
-      h += '<p class="note" style="margin-top:12px">' + (n.svc === 'vpc' ? 'Drag subnets inside this box. Everything in it runs in the region above. Add an Internet Gateway on its edge if it has public subnets.' : 'Drop services inside this subnet. Drag the box by its title; resize from the corner. Use Availability Zone settings on each service for multi-AZ.') + '</p>';
+      const inRegionBox = n.svc === 'vpc' && state.graph.nodes.some((g) => g.svc === 'region' && (() => { const c = S.nodeCenter(n); return c[0] >= g.x && c[0] <= g.x + g.w && c[1] >= g.y && c[1] <= g.y + g.h; })());
+      if (n.svc === 'region' || (n.svc === 'vpc' && !inRegionBox)) h += selectField('f-region', 'Region', 'region', n.props.region || 'primary', Object.keys(S.REGIONS).map((k) => [k, S.REGIONS[k]]));
+      const NOTES = {
+        region: 'Everything inside this box runs in the region above: VPCs, and regional services like S3, Lambda or DynamoDB. For a second region, add another Region box.',
+        vpc: inRegionBox ? 'This VPC takes its region from the Region box around it. Put Availability Zone boxes or subnets inside it, and an Internet Gateway on its edge if it has public subnets.' : 'Put Availability Zone boxes or subnets inside it. Everything in it runs in the region above. Add an Internet Gateway on its edge if it has public subnets.',
+        az: 'Put one public and/or one private subnet inside each AZ box. To make something highly available, draw it in two AZ boxes (for example one EC2 instance in each). A load balancer is drawn across both AZs, over the line between them.',
+        pubsubnet: 'Has a route to the Internet Gateway. Load balancers, NAT gateways and bastion hosts go here. Drag the box by its title; resize from the corner.',
+        privsubnet: 'No direct route from the internet. App servers, containers and databases go here. Drag the box by its title; resize from the corner.',
+      };
+      h += '<p class="note" style="margin-top:12px">' + NOTES[n.svc] + '</p>';
       h += '<div class="row"><button class="btn danger" type="button" data-act="delete">Delete box (keeps services)</button></div>';
       return h;
     }
     if (sv.vpc || pl.vpc) {
       const where = pl.vpc ? ((nodeById(pl.vpc) || {}).props || {}).label || 'VPC' : null;
-      h += '<div class="placebox">' + (pl.vpc ? esc(where) + ' › ' + (pl.subnet ? (pl.subnet === 'public' ? 'Public subnet' : 'Private subnet') : 'no subnet') : sv.vpc ? (state.level === 'beginner' ? 'Default VPC (Beginner mode: no VPC box needed)' : 'Not in a VPC yet: drag it into a subnet') : '') +
+      const azName = pl.az ? esc(((nodeById(pl.az) || {}).props || {}).label || 'Availability Zone') + ' › ' : pl.spanAzs ? 'across ' + pl.spanAzs + ' AZs › ' : '';
+      h += '<div class="placebox">' + (pl.vpc ? esc(where) + ' › ' + azName + (pl.subnet ? (pl.subnet === 'public' ? 'Public subnet' : 'Private subnet') : 'no subnet') : sv.vpc ? (state.level === 'beginner' ? 'Default VPC (Beginner mode: no VPC box needed)' : 'Not in a VPC yet: drag it into a subnet') : '') +
         (pl.region && pl.region !== 'global' ? ' · ' + esc(S.REGIONS[pl.region].split(' ')[0]) : '') + '</div>';
     }
-    if (sv.ha === 'azs') {
+    const effAz = state.effAzs && state.effAzs[n.id];
+    if (sv.ha === 'azs' && effAz) {
+      h += '<div class="placebox">Availability Zones: <b>' + effAz + '</b> (from the AZ boxes you drew it in)</div>';
+    } else if (sv.ha === 'azs') {
       const isDb = n.svc === 'rds' || n.svc === 'aurora' || n.svc === 'documentdb' || n.svc === 'neptune';
       const opts = n.svc === 'aurora' ? [[1, 'Writer only (no replica)'], [2, 'Writer + 1 replica in another AZ'], [3, 'Writer + 2 replicas (3 AZs)']]
         : isDb ? [[1, 'Single-AZ'], [2, 'Multi-AZ (standby in a second AZ)'], [3, 'Multi-AZ cluster (3 AZs)']] : [[1, '1 AZ'], [2, '2 AZs'], [3, '3 AZs']];
       h += selectField('f-azs', n.svc === 'aurora' ? 'Instances' : isDb ? 'Deployment' : 'Availability Zones', 'azs', n.props.azs || 1, opts);
       if (n.svc === 'aurora') h += '<p class="note">Aurora storage always keeps 6 copies of your data across 3 AZs. This setting is about the database instances: with a replica in another AZ, failover takes about 30 seconds instead of about 10 minutes.</p>';
     }
-    if (!sv.global && !sv.group && !sv.vpc && sv.cat !== 'clients' && !pl.vpc) {
+    if (pl.regionFromBox) h += '<div class="placebox">Region: ' + esc(S.REGIONS[pl.region]) + ' (from the Region box)</div>';
+    else if (!sv.global && !sv.group && !sv.vpc && sv.cat !== 'clients' && !pl.vpc) {
       h += selectField('f-region', 'Region', 'region', n.props.region || 'primary', Object.keys(S.REGIONS).map((k) => [k, S.REGIONS[k]]));
     }
     if (n.svc === 's3') h += selectField('f-access', 'Access', 'access', n.props.access, [['private', 'Private (Block Public Access on)'], ['presigned', 'Presigned URL uploads / downloads'], ['website', 'Public static website']]);
@@ -420,7 +440,8 @@
     snapshot();
     const n = { id: uid('n'), svc: svcId, props: S.defaultProps(svcId) };
     if (sv.group) {
-      n.w = svcId === 'vpc' ? 620 : 250; n.h = svcId === 'vpc' ? 380 : 290;
+      const SIZES = { region: [760, 520], vpc: [620, 380], az: [300, 380], pubsubnet: [250, 150], privsubnet: [250, 180] };
+      n.w = SIZES[svcId][0]; n.h = SIZES[svcId][1];
       n.x = Math.round(wx - 20); n.y = Math.round(wy - 14);
     } else {
       n.x = Math.round(wx - NODE.w / 2); n.y = Math.round(wy - NODE.icon / 2);
@@ -742,6 +763,28 @@
       addNode(d.svc, w.x + (k - 2.5) * 30, w.y + (k - 2.5) * 22);
       if (window.innerWidth < 900) $('#palette').classList.remove('open');
     }
+  }
+  palList.addEventListener('click', (ev) => { if (ev.target.closest('#btnKit')) addNetworkKit(); });
+  function addNetworkKit() {
+    const r = viewport.getBoundingClientRect();
+    const c = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+    const x0 = Math.round(c.x - 500), y0 = Math.round(c.y - 330);
+    snapshot();
+    const g = (svc, x, y, w, h, props) => { const n = { id: uid('n'), svc, x, y, w, h, props: Object.assign(S.defaultProps(svc), props || {}) }; state.graph.nodes.push(n); return n; };
+    g('region', x0, y0, 1000, 680, { region: 'primary' });
+    g('vpc', x0 + 40, y0 + 50, 920, 600, { label: 'VPC' });
+    ['A', 'B'].forEach((z, i) => {
+      const ox = x0 + 80 + i * 440;
+      g('az', ox, y0 + 100, 400, 520, { label: 'Availability Zone ' + z });
+      g('pubsubnet', ox + 20, y0 + 150, 360, 170, { label: 'Public subnet ' + z });
+      g('privsubnet', ox + 20, y0 + 340, 360, 250, { label: 'Private subnet ' + z });
+    });
+    const igw = { id: uid('n'), svc: 'igw', x: x0 + 40 - NODE.w / 2, y: y0 + 330, props: S.defaultProps('igw') };
+    state.graph.nodes.push(igw);
+    state.sel = null;
+    if (window.innerWidth < 900) $('#palette').classList.remove('open');
+    changed(); fitView();
+    flashNote('Network added. Drop load balancers across both public subnets, and servers and databases into the private subnets.');
   }
   palList.addEventListener('pointerup', endPal);
   palList.addEventListener('pointercancel', endPal);

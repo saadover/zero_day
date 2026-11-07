@@ -14,11 +14,17 @@ simulation runs entirely in your browser.
 - **Play** sends traffic through the design. Each arrow turns green (works),
   amber (works only with a NAT gateway or endpoint) or red (would fail), and
   the Results tab explains *why* and how to fix it.
-- **Questions** at four levels: Beginner, Intermediate, Associate, Professional.
-  Each one describes a system to build (a static site, a three-tier app, a data
-  lake, multi-region disaster recovery, a landing zone...) with a checklist of
-  requirements. 21 scenario templates with randomized details and extra
-  requirements, so questions vary every time.
+- **Questions** at four levels, with randomized details so they vary every time
+  (27 scenario templates):
+  - **Beginner**: 2-4 services, e.g. "an online shop reachable from the
+    internet with a database" (Users → EC2 → RDS). No VPC boxes needed: servers
+    and databases go in AWS's default VPC automatically. Hints are shown up front.
+  - **Intermediate**: static sites with CloudFront, serverless APIs, queues,
+    three-tier apps across Availability Zones.
+  - **Associate**: e-commerce with caching and WAF, data lakes, microservices,
+    hybrid VPN, IoT, video on demand.
+  - **Professional**: multi-region disaster recovery, multi-account landing
+    zones, global gaming backends, generative AI with RAG, data center exits.
 - **Suggestions** when the design works but there is a simpler or cheaper way
   (S3 + CloudFront instead of servers for static files, RDS Proxy for Lambda,
   a free Gateway Endpoint instead of a NAT gateway, Step Functions instead of
@@ -30,8 +36,8 @@ simulation runs entirely in your browser.
 - Undo/redo, save/open diagrams as JSON, works on phones (tap to add, drag from
   the dot to connect, pinch to zoom).
 
-Networking checks are relaxed (warnings) on Beginner and Intermediate and
-strict (failures) on Associate and Professional.
+Networking checks are off on Beginner (default VPC), relaxed (warnings) on
+Intermediate and strict (failures) on Associate and Professional.
 
 ## Run it
 
@@ -56,11 +62,11 @@ Then open http://localhost:8080. Opening `index.html` directly also works.
 | --- | --- |
 | `js/services.js` | Service catalog and connection rules (which service may send to which) |
 | `js/engine.js` | Simulation: placement in VPCs/subnets, arrow checks with reasons, networking checks, requirement checks, suggestions |
-| `js/scenarios.js` | Question generator (21 templates × 4 levels) and sample-answer layout |
+| `js/scenarios.js` | Question generator (27 templates across 4 levels) and sample-answer layout |
 | `js/app.js` | Canvas, drag and drop, inspector, results |
 | `js/icons.js` | Generated: the AWS icons used, bundled as inline SVG |
 | `tools/build-icons.js` | Regenerates `js/icons.js` from the `aws-icons` npm package |
-| `tests/` | `node tests/check-scenarios.js` (every sample answer passes its question, 840 cases) and `node tests/check-rules.js` (common mistakes fail with the right reason) |
+| `tests/` | `node tests/check-scenarios.js` (every sample answer passes its question, 1,080 cases) and `node tests/check-rules.js` (common mistakes fail with the right reason) |
 
 ## Icons
 

@@ -84,8 +84,8 @@
   const T = [];
   function tpl(id, level, make) { T.push({ id, level, make }); }
 
-  // ===== BEGINNER =====
-  tpl('static-site', 'beginner', (r) => {
+  // ===== INTERMEDIATE (first set) =====
+  tpl('static-site', 'intermediate', (r) => {
     const c = r.pick(COMPANIES), d = domainOf(c);
     const what = r.pick(['a marketing site', 'a portfolio site', 'an online menu', 'a landing page for a new product']);
     return {
@@ -105,7 +105,7 @@
     };
   });
 
-  tpl('contact-form', 'beginner', (r) => {
+  tpl('contact-form', 'intermediate', (r) => {
     const c = r.pick(COMPANIES);
     const store = r.chance(0.5);
     return {
@@ -125,7 +125,7 @@
     };
   });
 
-  tpl('photo-upload', 'beginner', (r) => {
+  tpl('photo-upload', 'intermediate', (r) => {
     const c = r.pick(COMPANIES);
     const client = r.pick(['users', 'mobile']);
     const days = r.pick([30, 60, 90, 180]);
@@ -145,7 +145,7 @@
     };
   });
 
-  tpl('nightly-report', 'beginner', (r) => {
+  tpl('nightly-report', 'intermediate', (r) => {
     const c = r.pick(COMPANIES);
     const t = r.pick(['01:00', '02:30', '06:00', '23:00']);
     const via = r.pick(['ses', 'sns']);
@@ -166,7 +166,7 @@
     };
   });
 
-  tpl('small-blog', 'beginner', (r) => {
+  tpl('small-blog', 'intermediate', (r) => {
     const c = r.pick(COMPANIES), d = domainOf(c);
     const engine = r.pick(['WordPress', 'Ghost', 'Drupal']);
     return {
@@ -182,6 +182,113 @@
       keys: { entry: 'ec2', app: 'ec2', data: 'db' },
       sol: { n: [['u', 'users'], ['r53', 'route53'], ['ec2', 'ec2', { label: engine }, 'pub'], ['db', 'rds', { label: 'MySQL' }, 'priv']],
         e: [['u', 'r53'], ['r53', 'ec2'], ['u', 'ec2'], ['ec2', 'db']] },
+    };
+  });
+
+  // ===== BEGINNER =====
+  // Small, friendly questions: 3-4 services, no VPC boxes needed (beginner mode
+  // puts servers and databases in AWS's default VPC automatically).
+  const APP = ['ec2', 'asg', 'lightsail', 'beanstalk', 'apprunner', 'ecs', 'fargate', 'eks', 'lambda', 'amplify'];
+  const DB = ['tag:sql', 'tag:nosql'];
+
+  tpl('shop', 'beginner', (r) => {
+    const c = r.pick(COMPANIES);
+    const what = r.pick(['handmade candles', 'sneakers', 'used books', 'plants', 'phone cases', 'coffee beans']);
+    return {
+      title: 'Online shop for ' + c,
+      story: [c + ' sells ' + what + ' and wants a simple online shop.',
+        'Customers open the shop in their browser from anywhere on the internet. The shop keeps its products and orders in a database.'],
+      reqs: [
+        R('Customers can open the shop from the internet.', (Q) => Q.reach(APP), 'Users → EC2 (a web server that runs the shop).'),
+        R('The shop saves products and orders in a database.', (Q) => Q.flow(APP, DB) && Q.reach(DB), 'EC2 → RDS (a managed database).'),
+      ],
+      keys: { app: 'web', data: 'db' },
+      sol: { n: [['u', 'users', { label: 'Customers' }], ['web', 'ec2', { label: 'Shop website' }], ['db', 'rds', { label: 'Products & orders' }]],
+        e: [['u', 'web'], ['web', 'db']] },
+    };
+  });
+
+  tpl('personal-site', 'beginner', (r) => {
+    const who = r.pick(['a photographer', 'a student', 'a local band', 'a yoga teacher', 'a freelance designer']);
+    return {
+      title: 'Personal website for ' + who,
+      story: ['You are helping ' + who + ' put a personal website online. It is just a few HTML pages and pictures. Nothing changes unless they upload new files.',
+        'It should be cheap and need no server to look after.'],
+      reqs: [
+        R('Visitors can open the website from the internet.', (Q) => Q.reach(['s3', 'amplify', 'lightsail', 'ec2']), 'Users → S3 bucket.'),
+        R('The pages and pictures are stored in S3.', (Q) => Q.reach('s3'), 'Select the S3 bucket and set Access to "Public static website".'),
+        R('No servers to look after.', (Q) => Q.none(SERVERS), 'S3 can serve the files by itself, so you don\'t need EC2.'),
+      ],
+      keys: { data: 's3' },
+      sol: { n: [['u', 'users', { label: 'Visitors' }], ['s3', 's3', { access: 'website', label: 'Website files' }]],
+        e: [['u', 's3']] },
+    };
+  });
+
+  tpl('file-storage', 'beginner', (r) => {
+    const c = r.pick(COMPANIES);
+    const files = r.pick(['invoices', 'school homework', 'recipes with photos', 'contracts', 'X-ray images']);
+    return {
+      title: 'File uploads for ' + c,
+      story: [c + ' has a web app where people upload ' + files + '.',
+        'The app runs on a server. The uploaded files must be kept safely and never lost, even if the server breaks.'],
+      reqs: [
+        R('People can open the app from the internet.', (Q) => Q.reach(APP), 'Users → EC2 (the app server).'),
+        R('Uploaded files are kept in S3, not on the server.', (Q) => Q.flow(APP, 's3'), 'EC2 → S3 bucket.'),
+      ],
+      keys: { app: 'web', data: 's3' },
+      sol: { n: [['u', 'users'], ['web', 'ec2', { label: 'Web app' }], ['s3', 's3', { label: files }]],
+        e: [['u', 'web'], ['web', 's3']] },
+    };
+  });
+
+  tpl('blog-domain', 'beginner', (r) => {
+    const c = r.pick(COMPANIES), d = domainOf(c);
+    return {
+      title: 'A blog at ' + d,
+      story: [c + ' wants a blog. Readers should reach it by typing ' + d + ' in their browser.',
+        'The blog runs on one server, and posts and comments are stored in a database.'],
+      reqs: [
+        R('Readers reach the blog by typing ' + d + '.', (Q) => Q.flow('users', 'route53') && Q.flow('route53', APP.concat(['alb', 'cloudfront'])), 'Users → Route 53 (DNS) → EC2.'),
+        R('The blog runs on a server.', (Q) => Q.reach(['ec2', 'lightsail', 'asg', 'beanstalk']), 'Use an EC2 instance.'),
+        R('Posts and comments are saved in a database.', (Q) => Q.flow(APP, DB), 'EC2 → RDS.'),
+      ],
+      keys: { app: 'web', data: 'db' },
+      sol: { n: [['u', 'users', { label: 'Readers' }], ['r53', 'route53', { label: d }], ['web', 'ec2', { label: 'Blog server' }], ['db', 'rds', { label: 'Posts' }]],
+        e: [['u', 'r53'], ['r53', 'web'], ['web', 'db']] },
+    };
+  });
+
+  tpl('signup-form', 'beginner', (r) => {
+    const c = r.pick(COMPANIES);
+    return {
+      title: 'Newsletter sign-up for ' + c,
+      story: [c + ' wants a sign-up form for its newsletter. When someone types their email and presses Send, the email address is saved.',
+        'Only a few people sign up each day, so it should cost nothing when nobody is using it: no servers.'],
+      reqs: [
+        R('The form sends the email address to an API on the internet.', (Q) => Q.reach(['apigw', 'appsync']), 'Users → API Gateway.'),
+        R('A small piece of code handles each sign-up.', (Q) => Q.flow(['apigw', 'appsync'], 'lambda'), 'API Gateway → Lambda.'),
+        R('Email addresses are saved in a database.', (Q) => Q.flow(['lambda', 'apigw', 'appsync'], DB), 'Lambda → DynamoDB.'),
+      ],
+      keys: { app: 'fn', data: 'db' },
+      sol: { n: [['u', 'users', { label: 'Visitors' }], ['api', 'apigw'], ['fn', 'lambda', { label: 'Save sign-up' }], ['db', 'dynamodb', { label: 'Subscribers' }]],
+        e: [['u', 'api'], ['api', 'fn'], ['fn', 'db']] },
+    };
+  });
+
+  tpl('fast-menu', 'beginner', (r) => {
+    const c = r.pick(COMPANIES);
+    return {
+      title: 'Fast menu website for ' + c,
+      story: [c + ' has its menu as a few web pages and photos stored in S3.',
+        'Tourists from other countries say the photos load slowly. Make the site load fast for visitors everywhere.'],
+      reqs: [
+        R('The pages and photos are stored in S3.', (Q) => Q.reach('s3'), 'Keep the files in an S3 bucket.'),
+        R('Visitors get the files from a server close to them (a CDN).', (Q) => Q.flow('users', 'cloudfront') && Q.flow('cloudfront', 's3'), 'Users → CloudFront → S3.'),
+      ],
+      keys: { data: 's3' },
+      sol: { n: [['u', 'users', { label: 'Visitors' }], ['cf', 'cloudfront'], ['s3', 's3', { label: 'Menu files' }]],
+        e: [['u', 'cf'], ['cf', 's3']] },
     };
   });
 

@@ -8,7 +8,7 @@ function graph(spec) {
   return { nodes, edges: spec.e.map(([a, b], i) => ({ id: 'e' + i, from: a, to: b })) };
 }
 function expect(name, spec, want) {
-  const r = S.evaluate(graph(spec), { strict: !!spec.strict });
+  const r = S.evaluate(graph(spec), { strict: !!spec.strict, simple: !!spec.simple });
   const txt = r.issues.filter((i) => i.level === 'error').map((i) => i.title + ' ' + i.detail).join(' | ');
   const ok = want ? new RegExp(want, 'i').test(txt) : r.errors === 0;
   if (!ok) { fails++; console.log('FAIL', name, '→', txt || '(no errors)'); } else console.log('ok  ', name);
@@ -27,5 +27,8 @@ expect('alb single az', { n: [['a', 'alb', { azs: 1 }, 60, 100], VPC, PUB, PRIV]
 expect('ec2 no vpc (strict)', { strict: true, n: [['e', 'ec2']], e: [] }, 'inside a VPC');
 expect('kinesis -> s3', { n: [['k', 'kinesis'], ['s', 's3']], e: [['k', 's']] }, 'Firehose');
 expect('serverless api ok', { n: [['u', 'users'], ['a', 'apigw'], ['l', 'lambda'], ['d', 'dynamodb']], e: [['u', 'a'], ['a', 'l'], ['l', 'd']] }, null);
+expect('beginner: users -> ec2 -> rds, no VPC boxes', { simple: true, n: [['u', 'users'], ['e', 'ec2'], ['d', 'rds']], e: [['u', 'e'], ['e', 'd']] }, null);
+expect('beginner: users -> rds still fails', { simple: true, n: [['u', 'users'], ['d', 'rds']], e: [['u', 'd']] }, 'never exposed');
+expect('beginner: users -> ecs needs a load balancer', { simple: true, n: [['u', 'users'], ['c', 'ecs']], e: [['u', 'c']] }, 'load balancer');
 console.log(fails ? fails + ' failed' : 'all rule checks passed');
 process.exit(fails ? 1 : 0);

@@ -209,6 +209,14 @@
     const edges = graph.edges.filter((e) => byId[e.from] && byId[e.to]);
     const place = computePlacement(nodes);
     const sv = (n) => SV()[n.svc];
+    // Beginner mode: anything that needs a network but isn't in a VPC box runs in
+    // AWS's default VPC, whose subnets are public. No VPC boxes needed.
+    if (opts.simple) {
+      nodes.forEach((n) => {
+        const s = sv(n);
+        if (s.vpc && !s.group && !place[n.id].vpc) place[n.id] = { vpc: '__default', subnet: 'public', subnetId: null, region: n.props.region || 'primary', defaultVpc: true };
+      });
+    }
     const name = (n) => (n.props && n.props.label) || sv(n).short;
     const issues = [];
     const suggestions = [];
@@ -346,7 +354,7 @@
     okEdges.forEach((e) => {
       const A = byId[e.from], B = byId[e.to];
       const va = place[A.id].vpc, vb = place[B.id].vpc;
-      if (!va || !vb || va === vb || !isInVpc(A) || !isInVpc(B)) return;
+      if (!va || !vb || va === vb || !isInVpc(A) || !isInVpc(B) || va === '__default' || vb === '__default') return;
       const replication = sv(A).tags.some((t) => ['sql', 'nosql', 'cache'].includes(t)) && sv(B).tags.some((t) => ['sql', 'nosql', 'cache'].includes(t));
       if (replication) return;
       if (!has('tgw') && !has('peering') && !has('privatelink') && !has('lattice')) {
@@ -355,7 +363,7 @@
     });
 
     // public databases
-    real.filter((n) => sv(n).tags.some((t) => ['sql', 'nosql', 'cache', 'warehouse'].includes(t)) && isPublicSubnet(n)).forEach((n) =>
+    real.filter((n) => sv(n).tags.some((t) => ['sql', 'nosql', 'cache', 'warehouse'].includes(t)) && isPublicSubnet(n) && !place[n.id].defaultVpc).forEach((n) =>
       issue('warn', name(n) + ' is in a public subnet', 'Databases and caches belong in private subnets so nothing on the internet can even try to connect.', 'Move it into a private subnet.', [n.id]));
 
     // cross-region latency
@@ -438,6 +446,7 @@
 
     // --- suggestions ---
     collectSuggestions(Q, nodes, okEdges, byId, place, suggestions, sv, name, opts);
+    if (opts.simple && suggestions.length > 3) suggestions.length = 3;
 
     const errors = issues.filter((i) => i.level === 'error').length;
     const reqFailed = requirements.filter((r) => !r.ok).length;

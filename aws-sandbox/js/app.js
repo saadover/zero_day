@@ -263,7 +263,7 @@
   function renderChrome() {
     $('#levels').innerHTML = S.LEVELS.map((l) => '<button type="button" data-level="' + l + '" aria-pressed="' + (state.level === l) + '">' + S.LEVEL_NAMES[l] + '</button>').join('');
     const strict = state.level === 'associate' || state.level === 'professional';
-    $('#modeChip').innerHTML = (state.mode === 'free' ? '<b>Free build</b>' : '<b>Question</b>') + ' · networking checks: <b>' + (strict ? 'strict' : 'relaxed') + '</b>';
+    $('#modeChip').innerHTML = (state.mode === 'free' ? '<b>Free build</b>' : '<b>Question</b>') + ' · networking checks: <b>' + (state.level === 'beginner' ? 'off (default VPC)' : strict ? 'strict' : 'relaxed') + '</b>';
     $('#btnUndo').disabled = !undoStack.length;
     $('#btnRedo').disabled = !redoStack.length;
     const tabs = { question: '#tab-question', inspect: '#tab-inspect', results: '#tab-results' };
@@ -289,7 +289,7 @@
     if (state.mode === 'free' || !state.scenario) {
       return '<p class="eyebrow">Free build</p><h2>Design anything</h2>' +
         '<p>No question is set. Build any architecture and press <b>Play</b>: every arrow, subnet and setting is checked, and you get suggestions for simpler or cheaper options.</p>' +
-        '<p class="note">The difficulty buttons at the top also set how strict the networking checks are. Beginner and Intermediate only warn about missing VPCs, NAT gateways and endpoints; Associate and Professional treat them as failures.</p>' +
+        '<p class="note">The difficulty buttons at the top also set how strict the networking checks are. Beginner skips them (everything runs in the default VPC), Intermediate only warns about missing VPCs, NAT gateways and endpoints, and Associate and Professional treat them as failures.</p>' +
         '<div class="row"><button class="btn primary" type="button" data-act="new">Give me a ' + esc(S.LEVEL_NAMES[state.level]) + ' question</button></div>' + howtoHTML();
     }
     const sc = state.scenario;
@@ -299,10 +299,10 @@
     sc.reqs.forEach((q, i) => {
       const st = res ? (res[i].ok ? 'ok' : 'no') : '';
       h += '<li class="' + st + '"><span class="mark">' + (st === 'ok' ? '✓' : st === 'no' ? '✗' : i + 1) + '</span><span>' + esc(q.text) +
-        (st === 'no' && q.hint ? '<span class="hint">Hint: ' + esc(q.hint) + '</span>' : '') + '</span></li>';
+        ((st === 'no' || (sc.level === 'beginner' && st !== 'ok')) && q.hint ? '<span class="hint">Hint: ' + esc(q.hint) + '</span>' : '') + '</span></li>';
     });
     h += '</ul>';
-    if (!res) h += '<p class="note" style="margin-top:10px">Build it on the canvas, then press <b>Play</b> to test it. Hints appear for anything that fails.</p>';
+    if (!res) h += '<p class="note" style="margin-top:10px">' + (sc.level === 'beginner' ? 'Drag the services from the left, connect them with arrows, then press <b>Play</b>. At Beginner you don\'t need VPC boxes: servers and databases go in AWS\'s default network automatically.' : 'Build it on the canvas, then press <b>Play</b> to test it. Hints appear for anything that fails.') + '</p>';
     h += '<div class="row">' +
       '<button class="btn" type="button" data-act="sample" id="sampleBtn">Show a sample answer</button>' +
       '<button class="btn" type="button" data-act="new">Another question</button>' +
@@ -313,7 +313,8 @@
   function howtoHTML() {
     return '<h3>How it works</h3><ol class="howto">' +
       '<li>Drag services from the left panel onto the canvas.</li>' +
-      '<li>For servers, containers, databases and load balancers, first drag a <b>VPC</b> box and <b>public / private subnet</b> boxes, then drop the services inside the right subnet.</li>' +
+      (state.level === 'beginner' ? '<li>At Beginner you can skip networking: servers and databases run in AWS\'s default network. From Intermediate up, drag a <b>VPC</b> box with <b>public / private subnets</b> and drop them inside.</li>' :
+      '<li>For servers, containers, databases and load balancers, first drag a <b>VPC</b> box and <b>public / private subnet</b> boxes, then drop the services inside the right subnet.</li>') +
       '<li>Drag from a service\'s blue dot to another service. The arrow means “sends requests or data to”.</li>' +
       '<li>Click a service to change its settings (Availability Zones, Multi-AZ, bucket access…).</li>' +
       '<li>Press <b>Play</b>. Traffic flows through your design; red arrows show what would fail, with the reason.</li></ol>' +
@@ -351,7 +352,7 @@
     }
     if (sv.vpc || pl.vpc) {
       const where = pl.vpc ? ((nodeById(pl.vpc) || {}).props || {}).label || 'VPC' : null;
-      h += '<div class="placebox">' + (pl.vpc ? esc(where) + ' › ' + (pl.subnet ? (pl.subnet === 'public' ? 'Public subnet' : 'Private subnet') : 'no subnet') : sv.vpc ? 'Not in a VPC yet: drag it into a subnet' : '') +
+      h += '<div class="placebox">' + (pl.vpc ? esc(where) + ' › ' + (pl.subnet ? (pl.subnet === 'public' ? 'Public subnet' : 'Private subnet') : 'no subnet') : sv.vpc ? (state.level === 'beginner' ? 'Default VPC (Beginner mode: no VPC box needed)' : 'Not in a VPC yet: drag it into a subnet') : '') +
         (pl.region && pl.region !== 'global' ? ' · ' + esc(S.REGIONS[pl.region].split(' ')[0]) : '') + '</div>';
     }
     if (sv.ha === 'azs') {
@@ -502,7 +503,7 @@
     state.connectFrom = null;
     const strict = state.level === 'associate' || state.level === 'professional';
     const reqs = state.mode === 'question' && state.scenario ? state.scenario.reqs : [];
-    const r = S.evaluate(state.graph, { strict, requirements: reqs, level: state.level });
+    const r = S.evaluate(state.graph, { strict, simple: state.level === 'beginner', requirements: reqs, level: state.level });
     state.result = r; state.resultStale = false;
     if (reduceMotion || !state.graph.edges.length) { finishPlay(); return; }
     state.animating = true; state.animDone = new Set();

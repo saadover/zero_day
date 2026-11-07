@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AWS Architecture Sandbox</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Design AWS architectures with real service icons, press Play, and find out whether it would actually work — with reasons and simpler alternatives.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/></svg>
+      </div>
+      <div><h1>AWS Architecture Sandbox</h1><small>Design · Play · Learn why</small></div>
+    </div>
+    <div class="levels" role="group" aria-label="Difficulty" id="levels"></div>
+    <button class="btn" id="btnNew" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+      New question
+    </button>
+    <div class="top-spacer"></div>
+    <div class="toolgroup">
+      <button class="iconbtn" id="btnUndo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button class="iconbtn" id="btnRedo" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button class="iconbtn" id="btnExport" type="button" title="Save diagram as a file" aria-label="Export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+      <button class="iconbtn" id="btnImport" type="button" title="Open a saved diagram" aria-label="Import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg></button>
+      <button class="iconbtn" id="btnClear" type="button" title="Clear the canvas" aria-label="Clear canvas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg></button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
+    </div>
+    <button class="btn play" id="btnPlay" type="button">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z"/></svg>
+      Play
+    </button>
+  </header>
+
+  <aside class="palette" id="palette" aria-label="AWS services">
+    <div class="pal-search">
+      <input type="search" id="palSearch" placeholder="Search 160 services…" autocomplete="off" aria-label="Search services">
+      <button class="clear" id="palClear" type="button" aria-label="Clear search" hidden>×</button>
+      <p class="pal-hint">Drag onto the canvas, or tap to add.</p>
+    </div>
+    <div class="pal-list" id="palList"></div>
+  </aside>
+
+  <main class="canvas-wrap" id="canvasWrap">
+    <div class="viewport" id="viewport">
+      <div class="world" id="world">
+        <div id="groupLayer"></div>
+        <svg class="edges" id="edges" aria-hidden="true">
+          <defs>
+            <marker id="arrow-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="marker-default" d="M0 0L10 5L0 10z"/></marker>
+            <marker id="arrow-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="marker-ok" d="M0 0L10 5L0 10z"/></marker>
+            <marker id="arrow-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="marker-bad" d="M0 0L10 5L0 10z"/></marker>
+            <marker id="arrow-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="marker-warn" d="M0 0L10 5L0 10z"/></marker>
+            <marker id="arrow-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="marker-sel" d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+          <g id="edgeLayer"></g>
+          <g id="packetLayer"></g>
+        </svg>
+        <div id="nodeLayer"></div>
+      </div>
+    </div>
+    <div class="canvas-empty" id="canvasEmpty" hidden>
+      <div>
+        <strong>Build your architecture here</strong>
+        Drag services from the left. Drag a VPC box and subnets for anything that runs in a network. Connect services by dragging from the blue dot, then press <b>Play</b>.
+        <div class="row" style="justify-content:center;pointer-events:auto"><button class="btn" id="btnExample" type="button">Load a broken example</button></div>
+      </div>
+    </div>
+    <div class="canvas-tools"><span class="mode-chip" id="modeChip"></span></div>
+    <div class="connect-banner" id="connectBanner" hidden><span id="connectText">Tap the service to connect to</span><button type="button" id="connectCancel">Cancel</button></div>
+    <button class="btn primary add-fab" id="btnAddFab" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Add service
+    </button>
+    <div class="zoombar">
+      <button class="iconbtn" id="zoomOut" type="button" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <span id="zoomLabel">100%</span>
+      <button class="iconbtn" id="zoomIn" type="button" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="iconbtn" id="zoomFit" type="button" aria-label="Fit diagram" title="Fit diagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+    <div class="verdict-toast" id="toast" hidden></div>
+  </main>
+
+  <aside class="side" aria-label="Question and results">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-question" aria-selected="true" type="button">Question</button>
+      <button role="tab" id="tab-inspect" aria-selected="false" type="button">Inspector</button>
+      <button role="tab" id="tab-results" aria-selected="false" type="button">Results</button>
+    </div>
+    <div class="tabpanel" id="panel"></div>
+  </aside>
+</div>
+<div class="tooltip" id="tooltip" hidden></div>
+
+<script src="js/services.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/scenarios.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

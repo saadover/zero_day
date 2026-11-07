@@ -163,7 +163,8 @@
   function nodeSub(n) {
     const sv = SV[n.svc], p = n.props || {};
     const bits = [];
-    if (sv.ha === 'azs') bits.push((p.azs || 1) + ' AZ');
+    if (n.svc === 'aurora') bits.push((p.azs || 1) === 1 ? 'writer only' : 'writer + ' + ((p.azs || 1) - 1) + ' replica' + ((p.azs || 1) > 2 ? 's' : ''));
+    else if (sv.ha === 'azs') bits.push((p.azs || 1) + ' AZ');
     if (n.svc === 's3' && p.access !== 'private') bits.push(p.access === 'website' ? 'website' : 'presigned');
     if (n.svc === 'lambda' && p.functionUrl) bits.push('func URL');
     if (p.crossRegion) bits.push('global DB');
@@ -357,8 +358,10 @@
     }
     if (sv.ha === 'azs') {
       const isDb = n.svc === 'rds' || n.svc === 'aurora' || n.svc === 'documentdb' || n.svc === 'neptune';
-      const opts = isDb ? [[1, 'Single-AZ'], [2, 'Multi-AZ (standby in a second AZ)'], [3, 'Multi-AZ cluster (3 AZs)']] : [[1, '1 AZ'], [2, '2 AZs'], [3, '3 AZs']];
-      h += selectField('f-azs', isDb ? 'Deployment' : 'Availability Zones', 'azs', n.props.azs || 1, opts);
+      const opts = n.svc === 'aurora' ? [[1, 'Writer only (no replica)'], [2, 'Writer + 1 replica in another AZ'], [3, 'Writer + 2 replicas (3 AZs)']]
+        : isDb ? [[1, 'Single-AZ'], [2, 'Multi-AZ (standby in a second AZ)'], [3, 'Multi-AZ cluster (3 AZs)']] : [[1, '1 AZ'], [2, '2 AZs'], [3, '3 AZs']];
+      h += selectField('f-azs', n.svc === 'aurora' ? 'Instances' : isDb ? 'Deployment' : 'Availability Zones', 'azs', n.props.azs || 1, opts);
+      if (n.svc === 'aurora') h += '<p class="note">Aurora storage always keeps 6 copies of your data across 3 AZs. This setting is about the database instances: with a replica in another AZ, failover takes about 30 seconds instead of about 10 minutes.</p>';
     }
     if (!sv.global && !sv.group && !sv.vpc && sv.cat !== 'clients' && !pl.vpc) {
       h += selectField('f-region', 'Region', 'region', n.props.region || 'primary', Object.keys(S.REGIONS).map((k) => [k, S.REGIONS[k]]));

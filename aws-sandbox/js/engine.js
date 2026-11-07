@@ -552,7 +552,11 @@
     // ASG / ECS in one AZ
     Q.list(['asg', 'ecs', 'eks', 'fargate', 'rds', 'aurora', 'elasticache']).forEach((n) => {
       if ((n.props.azs || 1) < 2 && Q.inbound(n).length) {
-        add('Spread ' + name(n) + ' across 2 or more AZs', 'If its Availability Zone has an outage, this part of the app goes down. ' + (sv(n).tags.includes('sql') ? 'Turn on Multi-AZ for automatic failover.' : 'Set Availability Zones to 2+.'), [n.id]);
+        if (n.svc === 'aurora') {
+          add('Add an Aurora Replica in a second AZ', 'Aurora already keeps 6 copies of your data across 3 AZs, so the data is safe. But ' + name(n) + ' has only a writer instance: if its AZ fails, Aurora must create a new instance (about 10 minutes of downtime). A replica in another AZ takes over in about 30 seconds and can also serve reads.', [n.id]);
+        } else {
+          add('Spread ' + name(n) + ' across 2 or more AZs', 'If its Availability Zone has an outage, this part of the app goes down. ' + (sv(n).tags.includes('sql') ? 'Turn on Multi-AZ for a standby in a second AZ with automatic failover.' : 'Set Availability Zones to 2+.'), [n.id]);
+        }
       }
     });
     // ECS on EC2

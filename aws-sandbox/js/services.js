@@ -112,7 +112,7 @@
 
   // ---------- Databases ----------
   s('rds', 'RDS database', 'RDS', 'database', ['sql'], 's:AmazonRDS', Object.assign({ vpc: 1 }, AZ), 'Managed MySQL, PostgreSQL, MariaDB, Oracle or SQL Server. Turn on Multi-AZ for failover.');
-  s('aurora', 'Aurora', 'Aurora', 'database', ['sql', 'aurora'], 's:AmazonAurora', Object.assign({ vpc: 1 }, AZ), 'Cloud-native MySQL/PostgreSQL. Up to 15 read replicas, Global Database, Serverless v2.');
+  s('aurora', 'Aurora', 'Aurora', 'database', ['sql', 'aurora'], 's:AmazonAurora', Object.assign({ vpc: 1 }, AZ), 'Cloud-native MySQL/PostgreSQL. Storage is always copied 6 ways across 3 AZs; add replicas (up to 15) for fast failover and reads. Global Database, Serverless v2.');
   s('rdsproxy', 'RDS Proxy', 'RDS Proxy', 'database', ['dbproxy'], 'r:AmazonRDSProxyInstance', Object.assign({ vpc: 1 }, H), 'Pools database connections, which protects RDS/Aurora from bursts of Lambda connections.');
   s('dynamodb', 'DynamoDB', 'DynamoDB', 'database', ['nosql', 'kv'], 's:AmazonDynamoDB', Object.assign({ start: 1 }, H), 'Serverless key-value database with single-digit millisecond latency at any scale.');
   s('dax', 'DynamoDB Accelerator (DAX)', 'DAX', 'database', ['cache', 'dax'], 's:AmazonDynamoDB', Object.assign({ vpc: 1 }, AZ), 'In-memory write-through cache in front of DynamoDB (microsecond reads).');

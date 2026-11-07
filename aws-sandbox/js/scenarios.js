@@ -458,12 +458,12 @@
         }, 'Orders → DynamoDB, Inventory → its own Aurora/DynamoDB. No database connected to both.'),
         R('Services communicate through events.', (Q) => Q.flow(['tag:container'], ['eventbridge', 'sns']) && Q.flow(['eventbridge', 'sns'], ['tag:container', 'sqs']), 'Orders → EventBridge → SQS → Inventory.'),
         R('Images come from a private registry.', (Q) => Q.direct(['tag:container'], 'ecr'), 'ECS → ECR.'),
-        R('Containers run in private subnets across 2 AZs.', (Q) => Q.private(['tag:container']) && Q.ha(['tag:container']), ''),
+        R('Containers run in private subnets across 2 AZs.', (Q) => Q.private(['tag:container']) && Q.ha(['tag:container']), 'Private subnets have no internet route: add VPC endpoints for DynamoDB, EventBridge, SQS and ECR (or a NAT gateway).'),
       ],
       keys: { entry: 'alb', app: 'ord', data: 'odb' },
       sol: { n: [['u', 'users'], ['r53', 'route53'], ['alb', 'alb', { azs: 2 }, 'pub'], ['ord', 'ecs', { azs: 2, launch: 'fargate', label: 'Orders' }, 'priv'], ['inv', 'ecs', { azs: 2, launch: 'fargate', label: 'Inventory' }, 'priv'],
         ['odb', 'dynamodb', { label: 'Orders table' }], ['idb', 'aurora', { azs: 2, label: 'Inventory DB' }, 'priv'], ['eb', 'eventbridge'], ['q', 'sqs', { label: 'Inventory events' }],
-        ['ecr', 'ecr'], ['gwe', 'gwendpoint', {}, 'priv'], ['ife', 'ifendpoint', {}, 'priv']],
+        ['ecr', 'ecr']],
       e: [['u', 'r53'], ['r53', 'alb'], ['u', 'alb'], ['alb', 'ord'], ['alb', 'inv'], ['ord', 'odb'], ['inv', 'idb'], ['ord', 'eb'], ['eb', 'q'], ['inv', 'q'], ['ord', 'ecr'], ['inv', 'ecr']] },
     };
   });
@@ -476,15 +476,15 @@
       story: [c + ' is moving an internal HR application to AWS. Employees work from the head office and must reach the app over a private, encrypted connection; the app must never be exposed to the internet.',
         'The ' + db + ' database (' + r.int(200, 900) + ' GB) has to be moved with less than 10 minutes of downtime. The app must survive an AZ outage.'],
       reqs: [
-        R('The office connects to the VPC over an encrypted private link.', (Q) => Q.flow('onprem', ['vpn', 'dx']), 'Data center → Site-to-Site VPN.'),
+        R('The office connects to the VPC over an encrypted private link.', (Q) => Q.flow('onprem', ['vpn', 'dx']), 'Data center → Customer Gateway → Site-to-Site VPN, with a Virtual Private Gateway on the VPC edge.'),
         R('Employees reach the app through an internal load balancer.', (Q) => Q.flow(['vpn', 'dx'], ['alb', 'nlb']) && Q.private(['alb', 'nlb']), 'VPN → ALB in a private subnet (internal).'),
         R('The app is not reachable from the internet.', (Q) => Q.none(['users', 'route53', 'cloudfront', 'igw']), 'No public entry points.'),
         R('The database is migrated with minimal downtime.', (Q) => Q.flow('onprem', 'dms') && Q.flow('dms', ['rds', 'aurora']), 'Data center → DMS → RDS.'),
         R('App servers and database survive an AZ outage.', (Q) => Q.ha(['asg', 'ecs', 'ec2']) && Q.ha(['rds', 'aurora']) && Q.has(['rds', 'aurora']), ''),
       ],
       keys: { entry: 'alb', app: 'asg', data: 'db' },
-      sol: { n: [['dc', 'onprem', { label: 'Head office' }], ['vpn', 'vpn'], ['alb', 'alb', { azs: 2, label: 'Internal ALB' }, 'priv'], ['asg', 'asg', { azs: 2, label: 'HR app' }, 'priv'], ['db', 'rds', { azs: 2, label: db }, 'priv'], ['dms', 'dms']],
-        e: [['dc', 'vpn'], ['vpn', 'alb'], ['alb', 'asg'], ['asg', 'db'], ['dc', 'dms'], ['dms', 'db']] },
+      sol: { n: [['dc', 'onprem', { label: 'Head office' }], ['cgw', 'cgw', { label: 'Office router' }], ['vpn', 'vpn'], ['vgw', 'vgw', {}, 'edge'], ['alb', 'alb', { azs: 2, label: 'Internal ALB' }, 'priv'], ['asg', 'asg', { azs: 2, label: 'HR app' }, 'priv'], ['db', 'rds', { azs: 2, label: db }, 'priv'], ['dms', 'dms']],
+        e: [['dc', 'cgw'], ['cgw', 'vpn'], ['vpn', 'alb'], ['alb', 'asg'], ['asg', 'db'], ['dc', 'dms'], ['dms', 'db']] },
     };
   });
 
@@ -549,7 +549,7 @@
       sol: { n: [['u', 'users'], ['r53', 'route53', { label: 'Failover routing' }],
         ['alb1', 'alb', { azs: 2 }, 'pub'], ['asg1', 'asg', { azs: 2, label: 'Portal' }, 'priv'], ['db1', 'aurora', { azs: 2, crossRegion: true, label: 'Aurora primary' }, 'priv'],
         ['alb2', 'alb', { azs: 2 }, 'pub:2'], ['asg2', 'asg', { azs: 2, label: 'Portal standby' }, 'priv:2'], ['db2', 'aurora', { azs: 2, crossRegion: true, label: 'Aurora secondary' }, 'priv:2'],
-        ['s1', 's3', { label: 'Documents' }], ['s2', 's3', { label: 'Documents replica', region: 'secondary' }], ['bk', 'backup'], ['gw1', 'gwendpoint', {}, 'priv'], ['gw2', 'gwendpoint', {}, 'priv:2']],
+        ['s1', 's3', { label: 'Documents' }], ['s2', 's3', { label: 'Documents replica', region: 'secondary' }], ['bk', 'backup']],
       e: [['u', 'r53'], ['r53', 'alb1'], ['r53', 'alb2'], ['u', 'alb1'], ['alb1', 'asg1'], ['asg1', 'db1'], ['alb2', 'asg2'], ['asg2', 'db2'], ['db1', 'db2'], ['asg1', 's1'], ['asg2', 's2'], ['s1', 's2'], ['bk', 'db1']] },
     };
   });
@@ -568,13 +568,13 @@
         R('Threats are detected and aggregated in one place.', (Q) => Q.flow('guardduty', 'securityhub'), 'GuardDuty → Security Hub.'),
         R('High-severity findings alert the security team.', (Q) => Q.flow('securityhub', ['sns', 'tag:email']), 'Security Hub → EventBridge → SNS.'),
         R('Resource configuration is continuously recorded and checked.', (Q) => Q.has('config'), 'AWS Config.'),
-        R('Several VPCs connect through a central hub.', (Q) => Q.has('tgw') && Q.groups('vpc') >= 2, 'Transit Gateway with two or more VPC boxes.'),
+        R('Several VPCs connect through a central hub.', (Q) => Q.has('tgw') && Q.attachedVpcs('tgw') >= 2, 'Transit Gateway with an arrow to each of two VPC boxes (their IP ranges must not overlap).'),
       ],
       keys: {},
       sol: { n: [['dev', 'developer'], ['idc', 'identitycenter'], ['org', 'organizations'], ['ct', 'controltower'], ['trail', 'cloudtrail', { label: 'Org trail' }], ['logs', 's3', { label: 'Log archive' }],
         ['gd', 'guardduty'], ['sh', 'securityhub'], ['eb', 'eventbridge'], ['sns', 'sns', { label: 'Security alerts' }], ['cfg', 'config'], ['tgw', 'tgw']],
-      e: [['dev', 'idc'], ['trail', 'logs'], ['gd', 'sh'], ['sh', 'eb'], ['eb', 'sns']],
-      vpcs: [{ label: 'Prod VPC' }, { label: 'Dev VPC' }] },
+      e: [['dev', 'idc'], ['trail', 'logs'], ['gd', 'sh'], ['sh', 'eb'], ['eb', 'sns'], ['tgw', 'vprod'], ['tgw', 'vdev']],
+      vpcs: [{ key: 'vprod', label: 'Prod VPC' }, { key: 'vdev', label: 'Dev VPC' }] },
     };
   });
 
@@ -594,8 +594,8 @@
       ],
       keys: { entry: 'nlb1', app: 'gs1', data: 'ddb1' },
       sol: { n: [['u', 'users', { label: 'Players' }], ['ga', 'ga'],
-        ['nlb1', 'nlb', { azs: 2 }, 'pub'], ['gs1', 'asg', { azs: 2, label: 'Game servers' }, 'priv'], ['lb1', 'memorydb', { azs: 2, label: 'Leaderboard' }, 'priv'], ['gw1', 'gwendpoint', {}, 'priv'],
-        ['nlb2', 'nlb', { azs: 2 }, 'pub:2'], ['gs2', 'asg', { azs: 2, label: 'Game servers' }, 'priv:2'], ['lb2', 'memorydb', { azs: 2, label: 'Leaderboard' }, 'priv:2'], ['gw2', 'gwendpoint', {}, 'priv:2'],
+        ['nlb1', 'nlb', { azs: 2 }, 'pub'], ['gs1', 'asg', { azs: 2, label: 'Game servers' }, 'priv'], ['lb1', 'memorydb', { azs: 2, label: 'Leaderboard' }, 'priv'],
+        ['nlb2', 'nlb', { azs: 2 }, 'pub:2'], ['gs2', 'asg', { azs: 2, label: 'Game servers' }, 'priv:2'], ['lb2', 'memorydb', { azs: 2, label: 'Leaderboard' }, 'priv:2'],
         ['ddb1', 'dynamodb', { globalTables: true, label: 'Players' }], ['ddb2', 'dynamodb', { globalTables: true, label: 'Players', region: 'secondary' }]],
       e: [['u', 'ga'], ['ga', 'nlb1'], ['ga', 'nlb2'], ['nlb1', 'gs1'], ['nlb2', 'gs2'], ['gs1', 'lb1'], ['gs2', 'lb2'], ['gs1', 'ddb1'], ['gs2', 'ddb2'], ['ddb1', 'ddb2']] },
     };
@@ -632,7 +632,7 @@
       story: [c + ' must leave its data center in ' + r.int(6, 12) + ' months. It runs ' + servers + ' Linux and Windows servers (to be rehosted as-is first), an ' + r.pick(['Oracle', 'SQL Server']) + ' database that must move to Aurora with continuous replication until cut-over, ' + r.int(10, 60) + ' TB of active file shares and ' + tb + ' TB of cold archive data.',
         'The office link is only 1 Gbps, and network connectivity to AWS must be private with a backup path.'],
       reqs: [
-        R('A dedicated private link with an encrypted backup path.', (Q) => Q.flow('onprem', 'dx') && Q.flow('onprem', 'vpn'), 'Data center → Direct Connect, plus Site-to-Site VPN as backup.'),
+        R('A dedicated private link with an encrypted backup path.', (Q) => Q.flow('onprem', 'dx') && Q.flow('onprem', 'vpn'), 'Data center → Direct Connect, plus Customer Gateway → Site-to-Site VPN as backup; a Virtual Private Gateway on the VPC edge terminates both.'),
         R('Servers are rehosted to EC2 with continuous replication.', (Q) => Q.flow('onprem', 'mgn') && Q.flow('mgn', ['ec2', 'asg']), 'Data center → Application Migration Service → EC2.'),
         R('The database migrates to Aurora with change data capture.', (Q) => Q.flow('onprem', 'dms') && Q.flow('dms', 'aurora'), 'Data center → DMS → Aurora.'),
         R('Active file shares are copied online.', (Q) => Q.flow('onprem', 'datasync') && Q.flow('datasync', ['efs', 'fsx', 's3']), 'DataSync → FSx / EFS.'),
@@ -641,10 +641,10 @@
         R('Migrated app and database survive an AZ outage.', (Q) => Q.ha(['asg', 'ec2']) && Q.ha('aurora') && Q.has('aurora'), ''),
       ],
       keys: { entry: 'alb', app: 'asg', data: 'db' },
-      sol: { n: [['dc', 'onprem'], ['dx', 'dx'], ['vpn', 'vpn'], ['mgn', 'mgn'], ['dms', 'dms'], ['ds', 'datasync'], ['snow', 'snowball'],
+      sol: { n: [['dc', 'onprem'], ['cgw', 'cgw', { label: 'Office router' }], ['dx', 'dx'], ['vpn', 'vpn'], ['vgw', 'vgw', {}, 'edge'], ['mgn', 'mgn'], ['dms', 'dms'], ['ds', 'datasync'], ['snow', 'snowball'],
         ['alb', 'alb', { azs: 2, label: 'Internal ALB' }, 'priv'], ['asg', 'asg', { azs: 2, label: 'Rehosted apps' }, 'priv'], ['db', 'aurora', { azs: 2 }, 'priv'], ['fs', 'fsx', { azs: 2, label: 'File shares' }, 'priv'],
         ['s3', 's3', { label: 'Archive' }], ['gl', 'glacier']],
-      e: [['dc', 'dx'], ['dc', 'vpn'], ['dx', 'alb'], ['vpn', 'alb'], ['alb', 'asg'], ['asg', 'db'], ['asg', 'fs'], ['dc', 'mgn'], ['mgn', 'asg'], ['dc', 'dms'], ['dms', 'db'], ['dc', 'ds'], ['ds', 'fs'], ['dc', 'snow'], ['snow', 's3'], ['s3', 'gl']] },
+      e: [['dc', 'dx'], ['dc', 'cgw'], ['cgw', 'vpn'], ['dx', 'alb'], ['vpn', 'alb'], ['alb', 'asg'], ['asg', 'db'], ['asg', 'fs'], ['dc', 'mgn'], ['mgn', 'asg'], ['dc', 'dms'], ['dms', 'db'], ['dc', 'ds'], ['ds', 'fs'], ['dc', 'snow'], ['snow', 's3'], ['s3', 'gl']] },
     };
   });
 
@@ -680,8 +680,38 @@
       sc.reqs.push(R(x.text, x.test, x.hint));
       x.add(sc.sol, sc.keys);
     }
+    ensureEndpoints(sc.sol);
     return sc;
   };
+
+  // Private resources that call AWS services need VPC endpoints (or a NAT gateway),
+  // exactly as in real AWS. Add the endpoints the sample answer needs.
+  function ensureEndpoints(sol) {
+    const byKey = {}; sol.n.forEach((x) => { byKey[x[0]] = x; });
+    const vpcOfZone = (z) => (z ? (z.split(':')[1] || '1') : null);
+    const added = new Set();
+    sol.e.slice().forEach(([a, b]) => {
+      const A = byKey[a], B = byKey[b];
+      if (!A || !B || !A[3] || !A[3].startsWith('priv') || B[3]) return;
+      const sa = S.SERVICES[A[1]], sb = S.SERVICES[B[1]];
+      if (!S.callsOut(sa) || S.egressExempt(sb) || sb.vpc) return;
+      const k = vpcOfZone(A[3]);
+      const zoneOf = (x) => x[3] && vpcOfZone(x[3]) === k;
+      if (sol.n.some((x) => x[1] === 'nat' && zoneOf(x))) return;
+      const needs = S.endpointsFor(B[1]);
+      if (!needs) { // third-party API: NAT gateway in a public subnet
+        sol.n.push(['natAuto' + k, 'nat', {}, k === '1' ? 'pub' : 'pub:' + k]);
+        return;
+      }
+      needs.forEach(([svc, service]) => {
+        const id = svc + ':' + service + ':' + k;
+        if (added.has(id) || sol.n.some((x) => x[1] === svc && zoneOf(x) && x[2] && x[2].service === service)) return;
+        added.add(id);
+        sol.n.push(['ep_' + svc + '_' + service + '_' + k, svc, { service, label: (svc === 'gwendpoint' ? 'Gateway endpoint: ' : 'Endpoint: ') + S.SERVICES[service].short }, k === '1' ? 'priv' : 'priv:' + k]);
+      });
+    });
+  }
+  S.ensureEndpoints = ensureEndpoints;
 
   // ---------- layout of a sample answer ----------
   const COLW = 200, ROWH = 128, X0 = 60, Y0 = 70;
@@ -748,7 +778,7 @@
       const height = 44 + 40 + maxRows * ROWH + 26;
       const left = X0 + minVpcCol * COLW - 44, right = X0 + maxVpcCol * COLW + NODE.w + 44;
       const region = v === 1 ? 'primary' : 'secondary';
-      const vpcId = mk('vpc', left, top, { region, label: v === 1 ? 'VPC' : 'VPC (us-west-2)' }, { w: right - left, h: height });
+      const vpcId = mk('vpc', left, top, { region, cidr: '10.' + (v - 1) + '.0.0/16', label: v === 1 ? 'VPC' : 'VPC (us-west-2)' }, { w: right - left, h: height });
       vpcBoxes[v] = { top, height, left, right, vpcId };
       ['pub', 'priv'].forEach((kind) => {
         const mem = members.filter((x) => zoneKind(x.zone) === kind);
@@ -763,15 +793,18 @@
           used[c]++;
         });
       });
-      if (members.some((x) => zoneKind(x.zone) === 'pub')) {
-        keyToId['__igw' + v] = mk('igw', left - NODE.w / 2, top + height / 2 - NODE.icon / 2 - 6, {});
-      }
+      const hasIgw = members.some((x) => zoneKind(x.zone) === 'pub');
+      if (hasIgw) keyToId['__igw' + v] = mk('igw', left - NODE.w / 2, top + height / 2 - NODE.icon / 2 - 6 - 60, {});
+      members.filter((x) => zoneKind(x.zone) === 'edge').forEach((x, i) => {
+        keyToId[x.key] = mk(x.svc, left - NODE.w / 2, top + height / 2 - NODE.icon / 2 + 50 + i * 110, x.props);
+      });
       y += height + 50;
     });
     const belowVpc = y;
     // extra empty VPCs (landing zone)
     (sol.vpcs || []).forEach((vv, i) => {
-      mk('vpc', X0 + (4 + i * 2) * COLW, belowVpc + 0, { region: 'primary', label: vv.label }, { w: COLW + 120, h: 150 });
+      const id = mk('vpc', X0 + (4 + i * 2) * COLW, belowVpc + 0, { region: 'primary', cidr: '10.' + (10 + i) + '.0.0/16', label: vv.label }, { w: COLW + 120, h: 150 });
+      if (vv.key) keyToId[vv.key] = id;
     });
     const extraVpcH = (sol.vpcs || []).length ? 190 : 0;
 
@@ -793,5 +826,151 @@
     let ide = 1;
     const edges = sol.e.filter(([a, b]) => keyToId[a] && keyToId[b]).map(([a, b]) => ({ id: 'e' + (ide++), from: keyToId[a], to: keyToId[b] }));
     return { nodes, edges };
+  };
+})(typeof window !== 'undefined' ? (window.AWSSIM = window.AWSSIM || {}) : (globalThis.AWSSIM = globalThis.AWSSIM || {}));
+
+/* ---------- AI cases and "fix a broken design" exercises ----------
+ * A case spec is plain JSON (what the AI endpoint returns):
+ * { kind: 'build'|'fix', level, title, story: [..], requirements: [{ text, hint, check }],
+ *   solution: { nodes: [{ key, svc, zone, label, props: [{ key, value }] }], edges: [[from, to]] },
+ *   start: same shape as solution (only for 'fix') }
+ * check: { op, a, b, via, n, key, value } — see CHECK_OPS.
+ */
+(function (S) {
+  'use strict';
+  const CHECK_OPS = {
+    has: (Q, c) => Q.has(c.a),
+    none: (Q, c) => Q.none(c.a),
+    reach: (Q, c) => Q.reach(c.a),
+    flow: (Q, c) => Q.flow(c.a, c.b, c.via && c.via.length ? c.via : undefined),
+    direct: (Q, c) => Q.direct(c.a, c.b),
+    ha: (Q, c) => Q.ha(c.a),
+    private: (Q, c) => Q.private(c.a),
+    regionsAtLeast: (Q, c) => Q.regions(c.a) >= (c.n || 2),
+    countAtLeast: (Q, c) => Q.count(c.a) >= (c.n || 1),
+    prop: (Q, c) => Q.prop(c.a, c.key, c.value === 'true' ? true : c.value === 'false' ? false : /^\d+$/.test(String(c.value)) ? +c.value : c.value),
+    attachedVpcsAtLeast: (Q, c) => Q.attachedVpcs(c.a[0] || 'tgw') >= (c.n || 2),
+  };
+  S.CHECK_OPS = Object.keys(CHECK_OPS);
+  const known = (sel) => sel.startsWith('tag:') || sel.startsWith('cat:') || !!S.SERVICES[sel];
+  S.compileCheck = function (c) {
+    const fn = CHECK_OPS[c.op];
+    return (Q) => fn(Q, { op: c.op, a: c.a || [], b: c.b || [], via: c.via || [], n: c.n, key: c.key, value: c.value });
+  };
+  function toSol(g) {
+    return {
+      n: (g.nodes || []).map((x) => {
+        const props = {};
+        (x.props || []).forEach(({ key, value }) => {
+          props[key] = value === 'true' ? true : value === 'false' ? false : /^\d+$/.test(String(value)) && key !== 'cidr' ? +value : value;
+        });
+        if (x.label) props.label = x.label;
+        return [x.key, x.svc, props, x.zone || null];
+      }),
+      e: (g.edges || []).map((e) => [e[0], e[1]]),
+      vpcs: g.vpcs || undefined,
+    };
+  }
+  // Problems that make a spec unusable before simulating it.
+  S.specProblems = function (spec) {
+    const p = [];
+    const graphs = [['solution', spec.solution]].concat(spec.kind === 'fix' ? [['start', spec.start]] : []);
+    graphs.forEach(([name, g]) => {
+      if (!g || !Array.isArray(g.nodes) || !g.nodes.length) { p.push(name + ' has no nodes'); return; }
+      const keys = new Set();
+      g.nodes.forEach((x) => {
+        if (!S.SERVICES[x.svc] || S.SERVICES[x.svc].group) p.push(name + ': unknown service id "' + x.svc + '" (VPC/subnet boxes are created from zones, not as nodes)');
+        if (keys.has(x.key)) p.push(name + ': duplicate key ' + x.key);
+        keys.add(x.key);
+        if (x.zone && !/^(pub|priv|edge)(:2)?$/.test(x.zone)) p.push(name + ': bad zone "' + x.zone + '" (use pub, priv, edge, pub:2, priv:2, edge:2 or null)');
+      });
+      (g.edges || []).forEach((e) => { if (!keys.has(e[0]) || !keys.has(e[1])) p.push(name + ': edge ' + e[0] + ' -> ' + e[1] + ' uses an unknown key'); });
+    });
+    (spec.requirements || []).forEach((r, i) => {
+      const c = r.check || {};
+      if (!CHECK_OPS[c.op]) p.push('requirement ' + (i + 1) + ': unknown op "' + c.op + '"');
+      [].concat(c.a || [], c.b || [], c.via || []).forEach((sel) => { if (!known(sel)) p.push('requirement ' + (i + 1) + ': unknown selector "' + sel + '"'); });
+    });
+    if (!(spec.requirements || []).length) p.push('no requirements');
+    return p;
+  };
+  S.scenarioFromSpec = function (spec) {
+    const level = S.LEVELS.includes(spec.level) ? spec.level : 'intermediate';
+    const sol = toSol(spec.solution);
+    S.ensureEndpoints(sol);
+    return {
+      id: 'ai', level, kind: spec.kind === 'fix' ? 'fix' : 'build', source: spec.source || 'ai',
+      title: String(spec.title || 'Architecture case'), story: (spec.story || []).map(String),
+      reqs: (spec.requirements || []).map((r) => ({ text: String(r.text), hint: String(r.hint || ''), test: S.compileCheck(r.check || {}) })),
+      sol, start: spec.kind === 'fix' && spec.start ? toSol(spec.start) : null, spec,
+    };
+  };
+  // Simulate a spec: the sample answer must pass, the starting design (fix cases) must fail.
+  S.checkSpec = function (spec) {
+    const problems = S.specProblems(spec);
+    if (problems.length) return { ok: false, problems };
+    const sc = S.scenarioFromSpec(spec);
+    const opts = { strict: sc.level !== 'beginner', simple: sc.level === 'beginner', requirements: sc.reqs, level: sc.level };
+    const r = S.evaluate(S.layoutSolution(sc.sol), opts);
+    const out = [];
+    r.issues.filter((i) => i.level === 'error').forEach((i) => out.push('solution fails: ' + i.title + ' — ' + i.detail + (i.fix ? ' Fix: ' + i.fix : '')));
+    r.requirements.forEach((q) => { if (!q.ok) out.push('solution does not meet requirement: "' + q.text + '"'); });
+    if (sc.start) {
+      const r2 = S.evaluate(S.layoutSolution(sc.start), opts);
+      if (r2.passed) out.push('the starting design already passes every check; it must fail at least one requirement or rule so there is something to fix');
+    }
+    return { ok: !out.length, problems: out };
+  };
+
+  // ---------- local "fix a broken design" generator ----------
+  const BREAKS = [
+    { id: 'no-endpoint', applies: (g) => g.nodes.some((n) => n.svc === 'gwendpoint' || n.svc === 'ifendpoint'),
+      apply: (g, r) => { const eps = g.nodes.filter((n) => n.svc === 'gwendpoint' || n.svc === 'ifendpoint'); const ep = eps[Math.floor(r() * eps.length)]; drop(g, ep.id); return 'A cost-cutting cleanup deleted a VPC endpoint (' + (ep.props.label || 'endpoint') + '). Since then, requests from the private subnets time out.'; } },
+    { id: 'no-nat', applies: (g) => g.nodes.some((n) => n.svc === 'nat'),
+      apply: (g) => { g.nodes.filter((n) => n.svc === 'nat').forEach((n) => drop(g, n.id)); return 'The NAT gateway was removed to save money. Outbound calls from the private subnets now fail.'; } },
+    { id: 'no-igw', applies: (g) => g.nodes.some((n) => n.svc === 'igw'),
+      apply: (g) => { const n = g.nodes.find((x) => x.svc === 'igw'); drop(g, n.id); return 'Someone detached the Internet Gateway during a network change. Nothing in the public subnets is reachable any more.'; } },
+    { id: 'single-az', applies: (g) => g.nodes.some((n) => (n.props.azs || 1) >= 2 && n.svc !== 'alb'),
+      apply: (g) => { g.nodes.filter((n) => (n.props.azs || 1) >= 2 && n.svc !== 'alb').forEach((n) => { n.props.azs = 1; }); return 'To cut costs, everything was scaled down to a single Availability Zone. Last night that AZ had an outage and the app went down.'; } },
+    { id: 'efs-instead-of-s3', applies: (g) => g.nodes.some((n) => n.svc === 's3' && g.edges.some((e) => e.to === n.id)),
+      apply: (g) => { const n = g.nodes.find((x) => x.svc === 's3' && g.edges.some((e) => e.to === x.id)); n.svc = 'efs'; n.props = S.defaultProps('efs'); n.props.label = 'Shared files (EFS)'; return 'The files are stored on EFS today. It costs too much, isn\'t reachable the way this design needs, and the team wants to move them to S3.'; } },
+    { id: 'no-cdn', applies: (g) => g.nodes.some((n) => n.svc === 'cloudfront') && g.nodes.some((n) => n.svc === 's3'),
+      apply: (g) => { const cf = g.nodes.find((n) => n.svc === 'cloudfront'); const ins = g.edges.filter((e) => e.to === cf.id).map((e) => e.from); const outs = g.edges.filter((e) => e.from === cf.id).map((e) => e.to); drop(g, cf.id); ins.forEach((a) => outs.forEach((b) => g.edges.push({ id: 'b' + a + b, from: a, to: b }))); return 'CloudFront was removed "to simplify things". Users now go straight to the origin and pages are slow (or broken) abroad.'; } },
+    { id: 'reversed', applies: (g) => g.edges.length > 2,
+      apply: (g, r) => { const cand = g.edges.filter((e) => { const a = S.SERVICES[g.nodes.find((n) => n.id === e.from).svc]; return a.cat !== 'clients'; }); const e = cand[Math.floor(r() * cand.length)] || g.edges[0]; const t = e.from; e.from = e.to; e.to = t; return 'A new engineer redrew part of the diagram and one connection now points the wrong way.'; } },
+    { id: 'missing-link', applies: (g) => g.edges.length > 3,
+      apply: (g, r) => { const e = g.edges[1 + Math.floor(r() * (g.edges.length - 1))]; g.edges = g.edges.filter((x) => x !== e); return 'A connection was lost in the last refactor, so one part of the system never receives anything.'; } },
+  ];
+  function drop(g, id) { g.nodes = g.nodes.filter((n) => n.id !== id); g.edges = g.edges.filter((e) => e.from !== id && e.to !== id); }
+  S.generateFixExercise = function (level, seed) {
+    if (seed === undefined || seed === null) seed = Math.floor(Math.random() * 1e9);
+    let a = seed >>> 0;
+    const r = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const pool = S.TEMPLATES.filter((t) => t.level === level);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const t = pool[Math.floor(r() * pool.length)];
+      const sc = S.generateScenario(level, Math.floor(r() * 1e9), t.id);
+      const start = S.layoutSolution(sc.sol);
+      const wanted = level === 'beginner' ? 1 : level === 'professional' ? 3 : 2;
+      const symptoms = [];
+      const options = BREAKS.filter((b) => b.applies(start)).sort(() => r() - 0.5);
+      for (const b of options) {
+        if (symptoms.length >= wanted) break;
+        if (!b.applies(start)) continue;
+        const before = JSON.stringify(start);
+        const text = b.apply(start, r);
+        const strictOpts = { strict: level !== 'beginner', simple: level === 'beginner', requirements: sc.reqs, level };
+        if (S.evaluate(start, strictOpts).passed) { Object.assign(start, JSON.parse(before)); continue; }
+        symptoms.push(text);
+      }
+      if (!symptoms.length) continue;
+      return Object.assign(sc, {
+        kind: 'fix', seed, source: 'local',
+        title: 'Fix: ' + sc.title,
+        story: sc.story.concat(['What\'s wrong today: ' + symptoms.join(' ')], ['The current design is on the canvas. Change it until Play passes.']),
+        startGraph: start,
+      });
+    }
+    return null;
   };
 })(typeof window !== 'undefined' ? (window.AWSSIM = window.AWSSIM || {}) : (globalThis.AWSSIM = globalThis.AWSSIM || {}));

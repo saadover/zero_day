@@ -41,12 +41,56 @@ simulation runs entirely in your browser.
 - Undo/redo, save/open diagrams as JSON, works on phones (tap to add, drag from
   the dot to connect, pinch to zoom).
 
-Networking checks are off on Beginner (default VPC), relaxed (warnings) on
-Intermediate and strict (failures) on Associate and Professional.
+## What Play checks (real AWS behaviour)
+
+From Intermediate up, anything that wouldn't work in a real account fails.
+Beginner lets you skip the network: servers and databases go in the default
+VPC, like a new account. Draw your own VPC there and the real rules apply.
+
+- **Arrows**: only connections AWS supports (users can't reach a database,
+  ElastiCache doesn't read the database for you, S3 doesn't push to servers,
+  Kinesis needs a consumer, Route 53 aliases S3 only as a website...).
+- **Subnets and gateways**: resources must sit in a subnet; public subnets need
+  an Internet Gateway (one per VPC); a NAT gateway must be in a public subnet;
+  Lambda in a VPC never gets a public IP.
+- **Endpoints, per service**: a private subnet reaches S3 / DynamoDB only through a
+  Gateway endpoint for that service (same region) or a NAT gateway; other AWS
+  services need an Interface endpoint for that exact service; ECR needs the ECR
+  endpoint plus an S3 gateway endpoint; third-party APIs need NAT.
+- **IP ranges (CIDR)**: VPC and subnets between /16 and /28, subnets inside the
+  VPC range and not overlapping, enough addresses (AWS reserves 5 per subnet,
+  ALB subnets at least /27), no overlap between peered / Transit Gateway VPCs or
+  between a VPC and the data center.
+- **Availability Zones**: a subnet is in one AZ; ALB needs 2 AZs; an RDS subnet
+  group needs 2 AZs.
+- **Hybrid**: Site-to-Site VPN needs a Customer Gateway and ends on a Virtual
+  Private Gateway (on the VPC edge) or a Transit Gateway attached to the VPC;
+  Direct Connect reaches a Transit Gateway only via a Direct Connect Gateway.
+- **Multi-VPC**: VPCs talk only through a Transit Gateway (arrows to each VPC
+  box, same region) or a peering connection joining exactly two VPCs.
+- **Other**: API Gateway needs a VPC Link for private load balancers; ACM
+  certificates for CloudFront must be in us-east-1.
+
+Not modelled: security groups, NACLs, route-table entries, IAM policies,
+quotas and prices.
+
+## Endless questions
+
+- **Built-in question**: 27 templates with randomized companies, numbers and
+  extra requirements.
+- **Fix a broken design**: takes a working answer and breaks it the way real
+  incidents happen (deleted endpoint or NAT, single AZ, EFS that should be S3,
+  CloudFront removed, a reversed or missing connection...). The broken design is
+  loaded on the canvas; fix it until Play passes. Works offline.
+- **✦ New AI case / ✦ AI fix-it case**: Claude writes a brand-new case every
+  time (`api/generate.js`). Before you see it, the server runs it through the
+  same simulator: the sample answer must pass and, for fix-it cases, the
+  starting design must fail. If not, Claude gets the simulator's complaints and
+  corrects the case (up to 3 rounds).
 
 ## Run it
 
-It's a static site with no build step:
+It's a static site; only the AI cases need the small server function:
 
 ```bash
 cd aws-sandbox
@@ -59,7 +103,14 @@ Then open http://localhost:8080. Opening `index.html` directly also works.
 
 1. In Vercel: Add New → Project → import the `zero_day` repository.
 2. Set **Root Directory** to `aws-sandbox`.
-3. Deploy. No environment variables are needed.
+3. Under **Environment Variables** add `ANTHROPIC_API_KEY` (from
+   console.anthropic.com) for AI cases. Optional: `SANDBOX_ACCESS_CODE`, so only
+   people who know the code can generate AI cases (each one costs a few cents of
+   API usage).
+4. Deploy. Without the key everything except AI cases still works.
+
+AI cases use Claude Opus 5.5 with structured output and take about 20-90
+seconds. `vercel.json` gives the function up to 300 seconds.
 
 ## Files
 
@@ -71,7 +122,8 @@ Then open http://localhost:8080. Opening `index.html` directly also works.
 | `js/app.js` | Canvas, drag and drop, inspector, results |
 | `js/icons.js` | Generated: the AWS icons used, bundled as inline SVG |
 | `tools/build-icons.js` | Regenerates `js/icons.js` from the `aws-icons` npm package |
-| `tests/` | `node tests/check-scenarios.js` (every sample answer passes its question, 1,080 cases) and `node tests/check-rules.js` (common mistakes fail with the right reason) |
+| `api/generate.js` | Vercel function: asks Claude for a new case and validates it with the simulator |
+| `tests/` | `npm test`: every sample answer passes its question (1,080 cases), every fix-it exercise starts broken and is fixable (240), realism rules (endpoints, CIDR, hybrid, TGW...), and the AI endpoint against a fake Claude |
 
 ## Icons
 

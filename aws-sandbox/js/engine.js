@@ -22,7 +22,68 @@
     if (svcId === 's3') p.replication = false;
     if (sv.group && svcId === 'vpc') p.region = 'primary';
     if (!sv.global && !sv.group && !sv.vpc) p.region = 'primary';
+    if (svcId === 'vpc') p.cidr = '10.0.0.0/16';
+    if (svcId === 'pubsubnet' || svcId === 'privsubnet') p.cidr = '';
+    if (svcId === 'onprem') p.cidr = '192.168.0.0/16';
+    if (svcId === 'gwendpoint') p.service = 's3';
+    if (svcId === 'ifendpoint') p.service = '';
+    if (svcId === 'apigw') p.vpcLink = false;
+    if (svcId === 'tgw') p.region = 'primary';
     return p;
+  };
+
+  // ---------- IP ranges ----------
+  function parseCidr(str) {
+    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(String(str || '').trim());
+    if (!m) return null;
+    const o = m.slice(1, 5).map(Number);
+    const p = +m[5];
+    if (o.some((x) => x > 255) || p > 32) return null;
+    const ip = o[0] * 16777216 + o[1] * 65536 + o[2] * 256 + o[3];
+    const size = Math.pow(2, 32 - p);
+    const base = ip - (ip % size);
+    const priv = (o[0] === 10) || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168);
+    return { ip, p, size, base, aligned: ip === base, fixed: ipStr(base) + '/' + p, private: priv };
+  }
+  function ipStr(n) { return [Math.floor(n / 16777216) % 256, Math.floor(n / 65536) % 256, Math.floor(n / 256) % 256, n % 256].join('.'); }
+  function cidrOverlap(a, b) { return a.base < b.base + b.size && b.base < a.base + a.size; }
+  function cidrInside(a, outer) { return a.base >= outer.base && a.base + a.size <= outer.base + outer.size; }
+  S.parseCidr = parseCidr;
+  // Subnets with an empty CIDR get the next free block inside their VPC (like the console suggests).
+  S.assignCidrs = function (nodes, place) {
+    const out = {};
+    nodes.filter((n) => n.svc === 'vpc').forEach((v) => { const c = v.props.cidr || '10.0.0.0/16'; out[v.id] = { cidr: c, parsed: parseCidr(c), auto: false }; });
+    const subnets = nodes.filter((n) => n.svc === 'pubsubnet' || n.svc === 'privsubnet').sort((a, b) => a.y - b.y || a.x - b.x);
+    subnets.forEach((sn) => { if (sn.props.cidr) out[sn.id] = { cidr: sn.props.cidr, parsed: parseCidr(sn.props.cidr), auto: false }; });
+    subnets.forEach((sn) => {
+      if (sn.props.cidr) return;
+      const vid = place[sn.id] && place[sn.id].vpc;
+      const vp = vid && out[vid] && out[vid].parsed;
+      if (!vp) { out[sn.id] = { cidr: '', parsed: null, auto: true, noVpc: !vid }; return; }
+      const sp = Math.min(28, Math.max(vp.p + 1, 24));
+      const size = Math.pow(2, 32 - sp);
+      const taken = subnets.filter((o) => o !== sn && out[o.id] && out[o.id].parsed && place[o.id] && place[o.id].vpc === vid).map((o) => out[o.id].parsed);
+      for (let i = 0; i * size < vp.size; i++) {
+        const cand = { base: vp.base + i * size, size };
+        if (!taken.some((t) => cidrOverlap(t, cand))) { const c = ipStr(cand.base) + '/' + sp; out[sn.id] = { cidr: c, parsed: parseCidr(c), auto: true }; return; }
+      }
+      out[sn.id] = { cidr: '', parsed: null, auto: true };
+    });
+    return out;
+  };
+
+  // ---------- egress helpers (shared with the question generator) ----------
+  // Does this kind of service make its own network calls from inside a subnet?
+  S.callsOut = (a) => a.tags.some((t) => ['vm', 'container', 'function', 'desktop', 'etl', 'bigdata'].includes(t));
+  // Targets that don't need a route out of the VPC (global, attached, or called by AWS on your behalf).
+  S.egressExempt = (b) => b.global || b.group || b.place || (b.cat === 'clients' && b.id !== 'external') ||
+    b.tags.some((t) => ['attach', 'finding', 'trail', 'org', 'hybridlink', 'cgw', 'dxgw'].includes(t)) || ['iam', 'cloudmap', 'identitycenter', 'directory'].includes(b.id);
+  // What a private subnet needs (besides a NAT gateway) to call this service.
+  S.endpointsFor = (svcId) => {
+    if (svcId === 'external') return null;
+    if (svcId === 's3' || svcId === 'dynamodb') return [['gwendpoint', svcId]];
+    if (svcId === 'ecr') return [['ifendpoint', 'ecr'], ['gwendpoint', 's3']];
+    return [['ifendpoint', svcId]];
   };
 
   // ---------- tag helpers ----------
@@ -205,9 +266,9 @@
       const [cx, cy] = nodeCenter(n);
       const sn = smallestContaining(subnets, cx, cy, 0);
       let v = sn ? (place[sn.id].vpc && vpcs.find((x) => x.id === place[sn.id].vpc)) : null;
-      if (!v) v = smallestContaining(vpcs, cx, cy, n.svc === 'igw' ? 50 : 0);
+      if (!v) v = smallestContaining(vpcs, cx, cy, n.svc === 'igw' || n.svc === 'vgw' ? 50 : 0);
       let subnetType = sn ? SV()[sn.svc].subnet : null;
-      let spanAzs = null;
+      let spanAzs = null, spanSubnetIds = null;
       if (!sn && v && sv.vpc) {
         // drawn across subnets (typical for a load balancer spanning two AZs)
         const box = { x: n.x - 34, y: n.y - 10, w: NODE.w + 68, h: NODE.icon + 20 };
@@ -215,11 +276,12 @@
         if (hits.length) {
           subnetType = hits.every((g) => g.svc === 'pubsubnet') ? 'public' : hits.every((g) => g.svc === 'privsubnet') ? 'private' : SV()[hits[0].svc].subnet;
           spanAzs = new Set(hits.map((g) => place[g.id].az || g.id)).size;
+          spanSubnetIds = hits.map((g) => g.id);
         }
       }
       const region = sv.global ? 'global' : v ? place[v.id].region : (regionAt(cx, cy) || n.props.region || 'primary');
       const az = azAt(cx, cy) || (sn ? place[sn.id].az : null);
-      place[n.id] = { vpc: v ? v.id : null, subnet: subnetType, subnetId: sn ? sn.id : null, region, az, spanAzs, regionFromBox: !sv.global && !v && !!regionAt(cx, cy) };
+      place[n.id] = { vpc: v ? v.id : null, subnet: subnetType, subnetId: sn ? sn.id : null, region, az, spanAzs, spanSubnetIds, regionFromBox: !sv.global && !v && !!regionAt(cx, cy) };
     });
     return place;
   }
@@ -266,14 +328,14 @@
     const suggestions = [];
     const edgeRes = {};
     const has = (id) => nodes.some((n) => n.svc === id);
-    const netLevel = strict ? 'error' : 'warn';
 
     function issue(level, title, detail, fix, nodeIds, edgeIds) {
       issues.push({ level, title, detail, fix: fix || '', nodeIds: nodeIds || [], edgeIds: edgeIds || [] });
     }
 
     const isInVpc = (n) => !!place[n.id].vpc && (sv(n).vpc || CAN_VPC.has(n.svc) || sv(n).place) && !sv(n).group;
-    const isPrivate = (n) => isInVpc(n) && place[n.id].subnet !== 'public' && !sv(n).place;
+    // Lambda in a VPC never gets a public IP, so it is private even in a public subnet.
+    const isPrivate = (n) => isInVpc(n) && !sv(n).place && (place[n.id].subnet !== 'public' || n.svc === 'lambda');
     const isPublicSubnet = (n) => isInVpc(n) && place[n.id].subnet === 'public';
 
     // --- edges ---
@@ -315,7 +377,16 @@
           ok = false; reason = 'Your data center can\'t reach private VPC resources over the public internet.';
           fix = 'Add a Site-to-Site VPN or Direct Connect: Data center → VPN → ' + name(B) + '.';
         }
-        if (ok && A.svc === 'lambda' && !isInVpc(A) && b.vpc && !b.place && !b.tags.includes('lb') && isPrivate(B)) {
+        if (ok && A.svc === 'apigw' && (b.tags.includes('lb') || b.tags.includes('vm') || b.tags.includes('container')) && b.vpc && isPrivate(B) && !A.props.vpcLink) {
+          ok = false; reason = name(B) + ' is in a private subnet. API Gateway runs outside your VPC and reaches private targets only through a VPC Link.';
+          fix = 'Turn on "VPC Link" for API Gateway in the inspector (it then reaches a private NLB/ALB), or make the load balancer internet-facing.';
+        }
+        if (ok && A.svc === 'acm') {
+          const ra = A.props.region || 'primary';
+          if (B.svc === 'cloudfront' && ra !== 'primary') { ok = false; reason = 'CloudFront only uses ACM certificates from us-east-1 (N. Virginia). This certificate is in ' + REGIONS[ra].split(' ')[0] + '.'; fix = 'Set the certificate\'s region to us-east-1 in the inspector.'; }
+          else if (B.svc !== 'cloudfront' && !SV()[B.svc].global && place[B.id] && place[B.id].region !== ra) { ok = false; reason = 'A certificate for ' + name(B) + ' must be in the same region (' + REGIONS[place[B.id].region].split(' ')[0] + '). This one is in ' + REGIONS[ra].split(' ')[0] + '.'; fix = 'Request the certificate in ' + REGIONS[place[B.id].region].split(' ')[0] + '.'; }
+        }
+        if (ok && A.svc === 'lambda' && !isInVpc(A) && b.vpc && !b.place && isPrivate(B)) {
           ok = false; reason = 'This Lambda function runs outside your VPC, so it can\'t reach ' + name(B) + ' in a private subnet.';
           fix = 'Drag the Lambda function into a private subnet (this attaches it to the VPC).';
         }
@@ -326,85 +397,232 @@
       edgeRes[e.id] = { ok, reason, fix };
       if (!ok) issue('error', name(A) + ' → ' + name(B) + ' won\'t work', reason, fix, [A.id, B.id], [e.id]);
     });
-    const okEdges = edges.filter((e) => edgeRes[e.id].ok);
+    let okEdges = edges.filter((e) => edgeRes[e.id].ok);
 
     // --- empty / no entry ---
     const real = nodes.filter((n) => !sv(n).group);
     if (!real.length) issue('error', 'The canvas is empty', 'Drag services from the left panel onto the canvas, then drag from a service\'s blue dot to another service to connect them.');
 
-    // --- VPC placement ---
+    // ======================= networking (mirrors real VPC behaviour) =======================
+    const vpcs = nodes.filter((n) => n.svc === 'vpc');
+    const subnetBoxes = nodes.filter((n) => n.svc === 'pubsubnet' || n.svc === 'privsubnet');
+    const azBoxes = nodes.filter((n) => n.svc === 'az');
+    const inV = (svc, v) => real.filter((n) => n.svc === svc && place[n.id].vpc === v);
+    const vpcName = (vid) => (byId[vid] ? name(byId[vid]) : 'the default VPC');
+
+    // --- placement ---
     const vpcNodes = real.filter((n) => sv(n).vpc && !sv(n).place);
     const notInVpc = vpcNodes.filter((n) => !place[n.id].vpc);
     if (notInVpc.length) {
-      issue(netLevel, 'Some resources aren\'t inside a VPC', notInVpc.map(name).join(', ') + ' must run inside a subnet of a VPC.',
-        has('vpc') ? 'Drag them into a subnet inside your VPC box.' : 'Add a VPC box with public and private subnets (from "Network boxes"), then drag them into the right subnet.', notInVpc.map((n) => n.id));
+      issue('error', 'Some resources aren\'t inside a VPC', notInVpc.map(name).join(', ') + ' must be launched into a subnet of a VPC.',
+        has('vpc') ? 'Drag them into a subnet inside your VPC box.' : 'Click "+ Ready-made network" under Network boxes, then drag them into the right subnet.', notInVpc.map((n) => n.id));
     }
     const noSubnet = vpcNodes.filter((n) => place[n.id].vpc && !place[n.id].subnet);
     if (noSubnet.length) {
-      issue(netLevel, 'Some resources are in the VPC but not in a subnet', noSubnet.map(name).join(', ') + ' sit directly in the VPC box. Every resource is launched into a specific subnet.',
-        'Add public/private subnet boxes inside the VPC and drag them in.', noSubnet.map((n) => n.id));
+      issue('error', 'Some resources are in the VPC but not in a subnet', noSubnet.map(name).join(', ') + ' sit directly in the VPC box. AWS launches every resource into a specific subnet.',
+        'Drag them into a public or private subnet box.', noSubnet.map((n) => n.id));
     }
     const misplaced = real.filter((n) => place[n.id].vpc && !sv(n).vpc && !sv(n).place && !CAN_VPC.has(n.svc));
     if (misplaced.length) {
       issue('warn', 'Regional services drawn inside the VPC', misplaced.map(name).join(', ') + ' are managed regional services. They don\'t live in your subnets; your VPC reaches them through endpoints, a NAT gateway or the internet gateway.',
         'Move them outside the VPC box.', misplaced.map((n) => n.id));
     }
-    const subnetsOutside = nodes.filter((n) => sv(n).tags.includes('subnetbox') && !place[n.id].vpc);
-    if (subnetsOutside.length) issue(netLevel, 'Subnet outside a VPC', 'Subnets always belong to a VPC.', 'Drag the subnet box inside a VPC box.', subnetsOutside.map((n) => n.id));
-
-    // --- public subnets need IGW ---
-    const vpcs = nodes.filter((n) => n.svc === 'vpc');
+    const subnetsOutside = subnetBoxes.filter((n) => !place[n.id].vpc);
+    if (subnetsOutside.length) issue('error', 'Subnet outside a VPC', 'A subnet is always part of one VPC.', 'Drag the subnet box inside a VPC box.', subnetsOutside.map((n) => n.id));
+    real.filter((n) => n.svc === 'gwendpoint' && !place[n.id].vpc).forEach((n) =>
+      issue('error', name(n) + ' isn\'t in a VPC', 'A gateway endpoint belongs to one VPC (it is added to that VPC\'s route tables).', 'Drag it inside the VPC box.', [n.id]));
+    real.filter((n) => n.svc === 'ifendpoint' && (!place[n.id].vpc || !place[n.id].subnet)).forEach((n) =>
+      issue('error', name(n) + ' isn\'t in a subnet', 'An interface endpoint is a network interface with a private IP, so it is created in a subnet (usually the private ones).', 'Drag it into a private subnet.', [n.id]));
+    real.filter((n) => (n.svc === 'nat') && !place[n.id].vpc).forEach((n) =>
+      issue('error', name(n) + ' isn\'t in a VPC', 'A NAT gateway is created in a public subnet of a VPC.', 'Drag it into a public subnet.', [n.id]));
+    real.filter((n) => (n.svc === 'igw' || n.svc === 'vgw') && !place[n.id].vpc).forEach((n) =>
+      issue('error', name(n) + ' isn\'t attached to a VPC', 'An ' + sv(n).name + ' does nothing until it is attached to a VPC.', 'Drag it onto the edge of the VPC box.', [n.id]));
     vpcs.forEach((v) => {
-      const inV = (n) => place[n.id] && place[n.id].vpc === v.id;
-      const needsIgw = real.some((n) => inV(n) && (isPublicSubnet(n) || n.svc === 'nat'));
-      const igw = real.some((n) => n.svc === 'igw' && inV(n));
-      if (needsIgw && !igw) {
-        issue(netLevel, 'No Internet Gateway on ' + name(v), 'Resources in the public subnet of ' + name(v) + ' have no route to the internet without an Internet Gateway attached to the VPC.',
+      ['igw', 'vgw'].forEach((t) => { const list = inV(t, v.id); if (list.length > 1) issue('error', name(v) + ' has ' + list.length + ' ' + SV()[t].name + 's', 'A VPC can have only one ' + SV()[t].name + ' attached.', 'Delete the extra one.', list.map((n) => n.id)); });
+    });
+    real.filter((n) => n.svc === 'lambda' && isInVpc(n) && place[n.id].subnet === 'public').forEach((n) =>
+      issue('warn', name(n) + ' is in a public subnet', 'Lambda functions attached to a VPC never get a public IP, so a public subnet gives them no internet access. They behave exactly like they are in a private subnet.', 'Put VPC-attached functions in private subnets and add a NAT gateway or endpoints for outbound calls.', [n.id]));
+
+    // --- Internet Gateway ---
+    vpcs.forEach((v) => {
+      const needsIgw = real.some((n) => place[n.id].vpc === v.id && (isPublicSubnet(n) || n.svc === 'nat'));
+      if (needsIgw && !inV('igw', v.id).length) {
+        issue('error', 'No Internet Gateway on ' + name(v), 'The public subnets of ' + name(v) + ' have no route to the internet without an Internet Gateway attached to the VPC. Internet-facing load balancers, public instances and NAT gateways won\'t work.',
           'Drag an Internet Gateway onto the edge of the VPC box.', [v.id]);
       }
     });
 
     // ALB in at least 2 AZs
     real.filter((n) => n.svc === 'alb' && (n.props.azs || 1) < 2).forEach((n) =>
-      issue('error', name(n) + ' needs at least 2 Availability Zones', 'AWS won\'t create an Application Load Balancer unless you give it subnets in two or more AZs.', place[n.id].az ? 'Draw the load balancer across both AZ boxes (its center on the line between them, outside any single AZ), or move it out of the AZ box and set Availability Zones to 2.' : 'Set Availability Zones to 2 or 3 in the inspector.', [n.id]));
-
+      issue('error', name(n) + ' needs at least 2 Availability Zones', 'AWS won\'t create an Application Load Balancer unless you give it subnets in two or more AZs.', place[n.id].az ? 'Draw the load balancer across both AZ boxes (over the gap between the two public subnets), or move it out of the AZ box and set Availability Zones to 2.' : 'Set Availability Zones to 2 or 3 in the inspector.', [n.id]));
     // NAT must be in a public subnet
-    real.filter((n) => n.svc === 'nat' && place[n.id].vpc && place[n.id].subnet !== 'public').forEach((n) =>
-      issue(netLevel, 'NAT gateway in the wrong subnet', 'A NAT gateway needs a route to the Internet Gateway, so it must sit in a public subnet.', 'Drag it into a public subnet.', [n.id]));
+    real.filter((n) => n.svc === 'nat' && place[n.id].vpc && place[n.id].subnet && place[n.id].subnet !== 'public').forEach((n) =>
+      issue('error', 'NAT gateway in a private subnet', 'A NAT gateway forwards traffic to the Internet Gateway, so it must sit in a public subnet. In a private subnet it has no way out.', 'Drag it into a public subnet.', [n.id]));
 
-    // private egress
-    const egressTarget = (b) => !b.vpc && !b.group && !b.place && b.cat !== 'clients' && !b.tags.includes('attach') && !b.tags.includes('support') && !b.global && !b.tags.includes('hybridlink');
-    okEdges.forEach((e) => {
-      const A = byId[e.from], B = byId[e.to];
-      if (!isPrivate(A)) return;
-      const b = sv(B);
-      const external = B.svc === 'external';
-      if (!external && !egressTarget(b)) return;
-      if (CAN_VPC.has(B.svc) && isInVpc(B)) return;
-      const v = place[A.id].vpc;
-      const inV = (id) => real.some((n) => n.svc === id && place[n.id].vpc === v);
-      const nat = inV('nat');
-      const gwEp = inV('gwendpoint') && (B.svc === 's3' || B.svc === 'dynamodb');
-      const ifEp = inV('ifendpoint') && !external;
-      if (!(nat || gwEp || ifEp)) {
-        edgeRes[e.id].netWarn = true;
-        issue(netLevel, name(A) + ' (private subnet) can\'t reach ' + name(B),
-          'Private subnets have no route out of the VPC. ' + (external ? 'Calling a third-party API needs a NAT gateway.' : name(B) + ' is a regional AWS endpoint outside your VPC.'),
-          external ? 'Add a NAT gateway in a public subnet.' : (B.svc === 's3' || B.svc === 'dynamodb') ? 'Add a VPC Gateway Endpoint (free) or a NAT gateway.' : 'Add a VPC Interface Endpoint or a NAT gateway.', [A.id, B.id], [e.id]);
-      }
+    // --- Availability Zones ---
+    subnetBoxes.forEach((sn) => {
+      const hits = azBoxes.filter((a) => sn.x < a.x + a.w && sn.x + sn.w > a.x && sn.y < a.y + a.h && sn.y + sn.h > a.y);
+      if (hits.length > 1) issue('error', name(sn) + ' spans two Availability Zones', 'In AWS a subnet lives in exactly one AZ. To use two AZs, create one subnet in each.', 'Resize the subnet so it sits inside a single AZ box.', [sn.id]);
+      const v = place[sn.id].vpc;
+      if (v && !hits.length && azBoxes.some((a) => place[a.id].vpc === v)) issue('error', name(sn) + ' isn\'t in an Availability Zone', 'This VPC uses AZ boxes, and every subnet must be created in one AZ.', 'Drag the subnet into an AZ box.', [sn.id]);
     });
+    real.filter((n) => ['rds', 'aurora', 'documentdb', 'neptune'].includes(n.svc) && place[n.id].vpc && place[n.id].vpc !== '__default').forEach((n) => {
+      const v = place[n.id].vpc;
+      if (!azBoxes.some((a) => place[a.id].vpc === v)) return;
+      const zones = new Set(subnetBoxes.filter((sn) => place[sn.id].vpc === v && place[sn.id].az && SV()[sn.svc].subnet === place[n.id].subnet).map((sn) => place[sn.id].az));
+      if (zones.size < 2) issue('error', name(n) + ': DB subnet group needs 2 AZs', 'AWS requires a database subnet group with subnets in at least two Availability Zones, even for a Single-AZ database.', 'Add a ' + (place[n.id].subnet || 'private') + ' subnet in a second AZ box.', [n.id]);
+    });
+
+    // --- IP ranges (CIDR) ---
+    const cidrs = S.assignCidrs(nodes, place);
+    const P = (id) => cidrs[id] && cidrs[id].parsed;
+    vpcs.forEach((v) => {
+      const c = cidrs[v.id];
+      if (!c.parsed) { issue('error', name(v) + ': "' + c.cidr + '" isn\'t a valid IP range', 'Write the VPC range as an IPv4 CIDR block, for example 10.0.0.0/16.', 'Fix it in the inspector.', [v.id]); return; }
+      if (!c.parsed.aligned) issue('error', name(v) + ': ' + c.cidr + ' isn\'t a network address', 'The host bits must be zero.', 'Use ' + c.parsed.fixed + '.', [v.id]);
+      if (c.parsed.p < 16 || c.parsed.p > 28) issue('error', name(v) + ': /' + c.parsed.p + ' isn\'t allowed', 'A VPC\'s IPv4 block must be between /16 (65,536 addresses) and /28 (16 addresses).', 'Use a size between /16 and /28.', [v.id]);
+      if (!c.parsed.private) issue('warn', name(v) + ' uses public IP space', c.cidr + ' is not a private (RFC 1918) range. AWS allows it, but it will clash with real internet addresses.', 'Use 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16.', [v.id]);
+    });
+    subnetBoxes.forEach((sn) => {
+      const c = cidrs[sn.id];
+      if (!c || !place[sn.id].vpc) return;
+      const vp = P(place[sn.id].vpc);
+      if (!c.parsed) { issue('error', name(sn) + ': ' + (c.cidr ? '"' + c.cidr + '" isn\'t a valid IP range' : 'no room for this subnet'), c.cidr ? 'Write it as an IPv4 CIDR block, for example 10.0.1.0/24.' : 'The VPC\'s IP range is already used up by the other subnets.', c.cidr ? 'Fix it in the inspector.' : 'Make the VPC range bigger or the subnets smaller.', [sn.id]); return; }
+      if (!c.parsed.aligned) issue('error', name(sn) + ': ' + c.cidr + ' isn\'t a network address', 'The host bits must be zero.', 'Use ' + c.parsed.fixed + '.', [sn.id]);
+      if (c.parsed.p < 16 || c.parsed.p > 28) issue('error', name(sn) + ': /' + c.parsed.p + ' isn\'t allowed', 'A subnet must be between /16 and /28.', '', [sn.id]);
+      if (vp && !cidrInside(c.parsed, vp)) issue('error', name(sn) + ' is outside the VPC\'s range', c.cidr + ' isn\'t inside ' + cidrs[place[sn.id].vpc].cidr + '. A subnet\'s range must be part of its VPC\'s range.', 'Pick a range inside ' + cidrs[place[sn.id].vpc].cidr + '.', [sn.id]);
+    });
+    for (let i = 0; i < subnetBoxes.length; i++) for (let j = i + 1; j < subnetBoxes.length; j++) {
+      const a = subnetBoxes[i], b = subnetBoxes[j];
+      if (place[a.id].vpc !== place[b.id].vpc || !place[a.id].vpc || !P(a.id) || !P(b.id)) continue;
+      if (cidrOverlap(P(a.id), P(b.id))) issue('error', name(a) + ' and ' + name(b) + ' overlap', cidrs[a.id].cidr + ' and ' + cidrs[b.id].cidr + ' share addresses. Subnets in a VPC can\'t overlap.', 'Give each subnet its own range.', [a.id, b.id]);
+    }
+    // capacity: AWS reserves 5 addresses in every subnet
+    const IP_USE = { ec2: 1, asg: 4, nat: 1, alb: 8, nlb: 1, gwlb: 1, ifendpoint: 1, rds: 1, aurora: 1, documentdb: 1, neptune: 1, elasticache: 1, memorydb: 1, dax: 1, efs: 1, fsx: 1,
+      ecs: 4, fargate: 2, eks: 16, lambda: 1, msk: 1, mq: 1, redshift: 1, emr: 4, rdsproxy: 1, opensearch: 1, workspaces: 1, batch: 4, sagemaker: 1, glue: 2, codebuild: 1 };
+    subnetBoxes.forEach((sn) => {
+      const c = P(sn.id); if (!c) return;
+      const users = real.filter((n) => place[n.id].subnetId === sn.id || (place[n.id].spanSubnetIds || []).includes(sn.id));
+      const need = users.reduce((t, n) => t + (IP_USE[n.svc] || 0), 0);
+      const usable = c.size - 5;
+      if (need > usable) issue('error', name(sn) + ' is too small', cidrs[sn.id].cidr + ' has ' + usable + ' usable addresses (AWS reserves 5), but the resources in it need about ' + need + '.', 'Use a bigger subnet, for example a /24 (251 usable).', [sn.id]);
+      if (users.some((n) => n.svc === 'alb') && c.p > 27) issue('error', name(sn) + ' is too small for a load balancer', 'An Application Load Balancer needs subnets of at least /27 with 8 free addresses.', 'Use /27 or larger.', [sn.id]);
+    });
+
+    // --- Transit Gateway / peering attachments (arrows to VPC boxes) ---
+    const vpcLinks = (hub) => okEdges.filter((e) => (e.from === hub.id && byId[e.to].svc === 'vpc') || (e.to === hub.id && byId[e.from].svc === 'vpc')).map((e) => (e.from === hub.id ? e.to : e.from));
+    const tgwAttach = {};
+    real.filter((n) => n.svc === 'tgw').forEach((t) => {
+      const att = [...new Set(vpcLinks(t))];
+      tgwAttach[t.id] = att;
+      if (!att.length) issue('error', name(t) + ' isn\'t attached to any VPC', 'A Transit Gateway only routes traffic for VPCs that have an attachment.', 'Draw an arrow from the Transit Gateway to each VPC box.', [t.id]);
+      att.forEach((vid) => {
+        if (place[vid].region !== (t.props.region || 'primary')) issue('error', name(t) + ' can\'t attach to ' + vpcName(vid), 'A Transit Gateway is regional: it attaches only to VPCs in its own region (' + REGIONS[t.props.region || 'primary'].split(' ')[0] + '). Other regions need their own Transit Gateway, peered with this one.', 'Add a Transit Gateway in that region.', [t.id, vid]);
+      });
+    });
+    const peerPairs = [];
+    real.filter((n) => n.svc === 'peering').forEach((pc) => {
+      const att = [...new Set(vpcLinks(pc))];
+      if (att.length !== 2) issue('error', name(pc) + ' must join exactly two VPCs', 'A peering connection is between two VPCs (it has ' + att.length + ' VPC arrow' + (att.length === 1 ? '' : 's') + ').', 'Draw an arrow from the peering connection to each of the two VPC boxes.', [pc.id]);
+      else peerPairs.push(att);
+    });
+    function vpcsConnected(a, b) {
+      if (peerPairs.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) return true;
+      return Object.values(tgwAttach).some((att) => att.includes(a) && att.includes(b));
+    }
+    const checkedPairs = new Set();
+    function overlapCheck(a, b, why) {
+      const k = [a, b].sort().join('|'); if (checkedPairs.has(k)) return; checkedPairs.add(k);
+      if (P(a) && P(b) && cidrOverlap(P(a), P(b))) issue('error', vpcName(a) + ' and ' + vpcName(b) + ' have overlapping IP ranges', cidrs[a].cidr + ' and ' + cidrs[b].cidr + ' overlap. ' + why + ' can\'t route between networks with the same addresses.', 'Give one of them a different range, e.g. 10.1.0.0/16.', [a, b]);
+    }
+    peerPairs.forEach(([a, b]) => overlapCheck(a, b, 'VPC peering'));
+    Object.values(tgwAttach).forEach((att) => att.forEach((a, i) => att.slice(i + 1).forEach((b) => overlapCheck(a, b, 'A Transit Gateway'))));
 
     // cross-VPC traffic
     okEdges.forEach((e) => {
       const A = byId[e.from], B = byId[e.to];
+      if (sv(A).group || sv(B).group) return;
       const va = place[A.id].vpc, vb = place[B.id].vpc;
       if (!va || !vb || va === vb || !isInVpc(A) || !isInVpc(B) || va === '__default' || vb === '__default') return;
       const replication = sv(A).tags.some((t) => ['sql', 'nosql', 'cache'].includes(t)) && sv(B).tags.some((t) => ['sql', 'nosql', 'cache'].includes(t));
       if (replication) return;
-      if (!has('tgw') && !has('peering') && !has('privatelink') && !has('lattice')) {
-        issue(netLevel, name(A) + ' and ' + name(B) + ' are in different VPCs', 'Separate VPCs are isolated networks by default.', 'Connect the VPCs with a Transit Gateway or VPC peering (or expose the service with PrivateLink).', [A.id, B.id], [e.id]);
+      if (!vpcsConnected(va, vb)) {
+        edgeRes[e.id].netWarn = true;
+        issue('error', name(A) + ' and ' + name(B) + ' are in different VPCs', 'Separate VPCs are isolated networks. Nothing routes between ' + vpcName(va) + ' and ' + vpcName(vb) + '.', 'Connect them: a Transit Gateway with arrows to both VPC boxes, or a VPC peering connection with arrows to both.', [A.id, B.id], [e.id]);
       }
     });
+
+    // --- hybrid connectivity (on-premises ↔ VPC) ---
+    const hybridVpcs = new Set();
+    real.filter((n) => n.svc === 'vpn').forEach((vpn) => {
+      if (!okEdges.some((e) => e.to === vpn.id && byId[e.from].svc === 'cgw')) {
+        issue('error', name(vpn) + ' has no Customer Gateway', 'A Site-to-Site VPN connects a Customer Gateway (your on-premises router\'s public IP) to AWS. Without it, AWS has nothing to build the tunnels to.', 'Data center → Customer Gateway → Site-to-Site VPN.', [vpn.id]);
+      }
+    });
+    okEdges.forEach((e) => {
+      const H = byId[e.from], B = byId[e.to];
+      if (H.svc === 'dx' && B.svc === 'tgw') {
+        edgeRes[e.id] = { ok: false, reason: 'Direct Connect can\'t attach to a Transit Gateway directly. It needs a transit virtual interface to a Direct Connect Gateway, which is associated with the Transit Gateway.', fix: 'Direct Connect → Direct Connect Gateway → Transit Gateway.' };
+        issue('error', name(H) + ' → ' + name(B) + ' won\'t work', edgeRes[e.id].reason, edgeRes[e.id].fix, [H.id, B.id], [e.id]);
+        return;
+      }
+      if (!['vpn', 'dx'].includes(H.svc)) return;
+      let vid = null;
+      if (B.svc === 'vpc') vid = B.id;
+      else if (B.svc === 'vgw' || B.svc === 'tgw' || B.svc === 'dxgw') return;
+      else if (sv(B).vpc || isInVpc(B)) vid = place[B.id].vpc;
+      if (!vid || vid === '__default') return;
+      const viaVgw = inV('vgw', vid).length > 0;
+      const tgwsForVpc = Object.keys(tgwAttach).filter((t) => tgwAttach[t].includes(vid));
+      const viaTgw = tgwsForVpc.some((t) => H.svc === 'vpn'
+        ? okEdges.some((x) => x.from === H.id && x.to === t)
+        : okEdges.some((x) => x.from === H.id && byId[x.to].svc === 'dxgw' && okEdges.some((y) => y.from === x.to && y.to === t)));
+      if (viaVgw || viaTgw) { hybridVpcs.add(vid); return; }
+      const what = H.svc === 'vpn' ? 'A Site-to-Site VPN' : 'Direct Connect (private virtual interface)';
+      edgeRes[e.id] = { ok: false, reason: what + ' ends on an AWS-side gateway. ' + vpcName(vid) + ' has no Virtual Private Gateway attached, and no Transit Gateway path from this ' + (H.svc === 'vpn' ? 'VPN' : 'connection') + ' to it.', fix: 'Drag a Virtual Private Gateway onto the edge of ' + vpcName(vid) + (H.svc === 'vpn' ? ', or connect the VPN to a Transit Gateway attached to the VPC.' : ', or go Direct Connect → Direct Connect Gateway → Transit Gateway attached to the VPC.') };
+      issue('error', name(H) + ' can\'t reach ' + name(B), edgeRes[e.id].reason, edgeRes[e.id].fix, [H.id, B.id], [e.id]);
+    });
+    real.filter((n) => n.svc === 'onprem').forEach((dc) => {
+      const c = parseCidr(dc.props.cidr || '192.168.0.0/16');
+      if (!c) { issue('error', name(dc) + ': "' + dc.props.cidr + '" isn\'t a valid IP range', 'Write your data center\'s network as a CIDR block, e.g. 192.168.0.0/16.', '', [dc.id]); return; }
+      hybridVpcs.forEach((vid) => {
+        if (P(vid) && cidrOverlap(c, P(vid))) issue('error', name(dc) + ' and ' + vpcName(vid) + ' use the same IP range', (dc.props.cidr || '192.168.0.0/16') + ' overlaps ' + cidrs[vid].cidr + '. Routes over the VPN / Direct Connect would be ambiguous, so traffic can\'t flow.', 'Change the VPC range (or the data center range) so they don\'t overlap.', [dc.id, vid]);
+      });
+    });
+
+    // --- private subnets reaching things outside the VPC ---
+    const callsOut = S.callsOut, exemptTarget = S.egressExempt;
+    okEdges.forEach((e) => {
+      const A = byId[e.from], B = byId[e.to];
+      if (!isPrivate(A) || !callsOut(sv(A))) return;
+      const b = sv(B);
+      const external = B.svc === 'external';
+      if (!external && (exemptTarget(b) || b.vpc || isInVpc(B))) return;
+      const v = place[A.id].vpc;
+      if (v === '__default') return;
+      const sameRegion = external || place[B.id].region === place[A.id].region;
+      const natOk = inV('nat', v).some((n) => place[n.id].subnet === 'public');
+      const ifEp = (svc) => sameRegion && inV('ifendpoint', v).some((n) => n.props.service === svc);
+      const gwEp = (svc) => sameRegion && inV('gwendpoint', v).some((n) => (n.props.service || 's3') === svc);
+      let ok = natOk, need;
+      if (!ok && !external) {
+        if (B.svc === 's3' || B.svc === 'dynamodb') { ok = gwEp(B.svc) || ifEp(B.svc); need = 'a Gateway endpoint for ' + b.short + (sameRegion ? ' (free)' : '') + ' or a NAT gateway'; }
+        else if (B.svc === 'ecr') { ok = ifEp('ecr') && (gwEp('s3') || ifEp('s3')); need = 'an Interface endpoint for ECR plus a Gateway endpoint for S3 (image layers are downloaded from S3), or a NAT gateway'; }
+        else { ok = ifEp(B.svc); need = 'an Interface endpoint for ' + b.short + ' or a NAT gateway'; }
+        if (!sameRegion) need = 'a NAT gateway (endpoints only reach services in their own region; ' + name(B) + ' is in ' + REGIONS[place[B.id].region].split(' ')[0] + ')';
+      }
+      if (external) need = 'a NAT gateway in a public subnet';
+      if (!ok) {
+        edgeRes[e.id].netWarn = true;
+        issue('error', name(A) + ' (private subnet) can\'t reach ' + name(B),
+          (A.svc === 'lambda' ? 'A Lambda function attached to a VPC has no internet route of its own. ' : 'A private subnet has no route out of ' + vpcName(v) + '. ') + (external ? 'A third-party API is on the internet.' : name(B) + ' is a regional AWS endpoint outside your VPC.'),
+          'Add ' + need + ' in ' + vpcName(v) + '.', [A.id, B.id], [e.id]);
+      }
+    });
+    real.filter((n) => n.svc === 'ifendpoint' && !n.props.service).forEach((n) =>
+      issue('warn', name(n) + ' has no service chosen', 'Each interface endpoint serves one AWS service. This one isn\'t set to any, so it does nothing.', 'Pick the service in the inspector.', [n.id]));
+
+    okEdges = edges.filter((e) => edgeRes[e.id].ok);
 
     // public databases
     real.filter((n) => sv(n).tags.some((t) => ['sql', 'nosql', 'cache', 'warehouse'].includes(t)) && isPublicSubnet(n) && !place[n.id].defaultVpc).forEach((n) =>
@@ -537,6 +755,7 @@
       list, match, flow, direct,
       has: (sel) => list(sel).length > 0,
       groups: (svc) => nodes.filter((n) => n.svc === svc).length,
+      attachedVpcs: (svc) => new Set(okEdges.filter((e) => (byId[e.from].svc === svc && byId[e.to].svc === 'vpc') || (byId[e.to].svc === svc && byId[e.from].svc === 'vpc')).map((e) => (byId[e.to].svc === 'vpc' ? e.to : e.from))).size,
       count: (sel) => list(sel).length,
       none: (sel) => list(sel).length === 0,
       reach: (sel) => flow(['users', 'mobile'], sel),

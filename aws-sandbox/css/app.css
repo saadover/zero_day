@@ -246,6 +246,12 @@ button { cursor: pointer; }
 .tabpanel p { margin: 0 0 10px; }
 .story p { color: var(--ink); }
 .lvl-chip { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); margin-bottom: 8px; }
+.lvl-chip.kind-fix { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.lvl-chip.kind-ai { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.ai-row { margin-top: 8px; }
+.btn.ai { border-color: var(--accent); color: var(--accent); }
+.btn.ai[disabled] { opacity: 0.7; }
+.ai-error { font-size: 13px; color: var(--bad); background: var(--bad-soft); padding: 8px 10px; border-radius: 8px; margin-top: 10px; }
 .reqs { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .reqs li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); }
 .reqs .mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 1.5px solid var(--line); color: var(--ink-soft); }

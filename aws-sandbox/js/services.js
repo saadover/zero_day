@@ -66,13 +66,16 @@
   // ---------- Networking ----------
   s('igw', 'Internet Gateway', 'Internet GW', 'networking', ['netplace', 'igw'], 'r:AmazonVPCInternetGateway', { place: 1, anyIn: 1 }, 'Gives public subnets a route to and from the internet. One per VPC.');
   s('nat', 'NAT Gateway', 'NAT GW', 'networking', ['netplace', 'natgw'], 'r:AmazonVPCNATGateway', { place: 1, anyIn: 1, vpc: 1, fixedSubnet: 'public' }, 'Lets private subnets reach the internet (outbound only). Sits in a public subnet.');
-  s('gwendpoint', 'VPC Gateway Endpoint', 'Gateway endpoint', 'networking', ['netplace', 'endpoint-gw'], 'r:AmazonVPCEndpoints', { place: 1, anyIn: 1 }, 'Free private route from your VPC to S3 and DynamoDB, without a NAT gateway.');
-  s('ifendpoint', 'VPC Interface Endpoint', 'Interface endpoint', 'networking', ['netplace', 'endpoint-if'], 'r:AmazonVPCEndpoints', { place: 1, anyIn: 1 }, 'PrivateLink endpoint that lets private subnets call AWS services (SQS, SNS, Secrets Manager...) without the internet.');
+  s('gwendpoint', 'VPC Gateway Endpoint', 'Gateway endpoint', 'networking', ['netplace', 'endpoint-gw'], 'r:AmazonVPCEndpoints', { place: 1, anyIn: 1 }, 'Free private route from your VPC to S3 or DynamoDB (choose which in the inspector), for buckets and tables in the same region. Place it inside the VPC box.');
+  s('ifendpoint', 'VPC Interface Endpoint', 'Interface endpoint', 'networking', ['netplace', 'endpoint-if'], 'r:AmazonVPCEndpoints', { place: 1, anyIn: 1, vpc: 1 }, 'PrivateLink endpoint for ONE AWS service (choose it in the inspector): SQS, Secrets Manager, ECR, CloudWatch... It is a network interface, so it sits in a subnet.');
+  s('vgw', 'Virtual Private Gateway', 'Virtual private GW', 'networking', ['netplace', 'vgw'], 'r:AmazonVPCVPNGateway', { place: 1, anyIn: 1 }, 'The AWS end of a Site-to-Site VPN or Direct Connect private VIF. Attach one per VPC by placing it on the VPC box edge.');
+  s('cgw', 'Customer Gateway', 'Customer GW', 'networking', ['cgw'], 'r:AmazonVPCCustomerGateway', {}, 'Represents your on-premises router (its public IP and BGP ASN). Every Site-to-Site VPN needs one.');
+  s('dxgw', 'Direct Connect Gateway', 'DX gateway', 'networking', ['dxgw'], 'r:AWSDirectConnectGateway', { global: 1 }, 'Connects a Direct Connect link to Virtual Private Gateways or Transit Gateways in any region.');
   s('privatelink', 'PrivateLink service', 'PrivateLink', 'networking', ['netplace'], 's:AWSPrivateLink', { place: 1, anyIn: 1 }, 'Expose a service privately to other VPCs or accounts.');
-  s('tgw', 'Transit Gateway', 'Transit GW', 'networking', ['netplace', 'hub'], 's:AWSTransitGateway', { place: 1, anyIn: 1 }, 'Hub that connects many VPCs and on-premises networks.');
-  s('peering', 'VPC Peering', 'VPC peering', 'networking', ['netplace', 'hub'], 'r:AmazonVPCPeeringConnection', { place: 1, anyIn: 1 }, 'Private one-to-one link between two VPCs.');
-  s('vpn', 'Site-to-Site VPN', 'S2S VPN', 'networking', ['hybridlink'], 's:AWSSitetoSiteVPN', { anyIn: 0 }, 'Encrypted tunnel over the internet between your data center and a VPC.');
-  s('dx', 'Direct Connect', 'Direct Connect', 'networking', ['hybridlink'], 's:AWSDirectConnect', {}, 'Dedicated private fiber link from your data center to AWS.');
+  s('tgw', 'Transit Gateway', 'Transit GW', 'networking', ['netplace', 'hub'], 's:AWSTransitGateway', { place: 1, anyIn: 1 }, 'Regional hub that connects many VPCs, VPNs and Direct Connect. Attach it to each VPC by drawing an arrow from it to the VPC box.');
+  s('peering', 'VPC Peering', 'VPC peering', 'networking', ['netplace', 'hub'], 'r:AmazonVPCPeeringConnection', { place: 1, anyIn: 1 }, 'Private one-to-one link between two VPCs (not transitive). Draw an arrow from it to each of the two VPC boxes.');
+  s('vpn', 'Site-to-Site VPN', 'S2S VPN', 'networking', ['hybridlink'], 's:AWSSitetoSiteVPN', { anyIn: 0 }, 'Encrypted IPsec tunnels over the internet. Customer Gateway → VPN → Virtual Private Gateway (or Transit Gateway) on the AWS side.');
+  s('dx', 'Direct Connect', 'Direct Connect', 'networking', ['hybridlink'], 's:AWSDirectConnect', {}, 'Dedicated private fiber link. Reaches a VPC through a Virtual Private Gateway, or a Transit Gateway via a Direct Connect Gateway.');
   s('clientvpn', 'Client VPN', 'Client VPN', 'networking', ['hybridlink'], 's:AWSClientVPN', { pub: 1 }, 'Lets individual employees connect to the VPC from their laptops.');
   s('route53', 'Route 53', 'Route 53', 'networking', ['dns'], 's:AmazonRoute53', { pub: 1, global: 1, start: 0 }, 'DNS: maps your domain name to CloudFront, load balancers or API Gateway. Supports failover and latency routing.');
   s('cloudfront', 'CloudFront', 'CloudFront', 'networking', ['edge'], 's:AmazonCloudFront', { pub: 1, global: 1 }, 'Content delivery network: caches content at 600+ edge locations close to users.');
@@ -172,7 +175,7 @@
   s('identitycenter', 'IAM Identity Center', 'Identity Center', 'security', ['support', 'sso'], 's:AWSIAMIdentityCenter', { anyIn: 1, place: 1, global: 1 }, 'Single sign-on for your workforce across many AWS accounts.');
   s('waf', 'WAF', 'WAF', 'security', ['attach', 'waf'], 's:AWSWAF', { global: 1 }, 'Web application firewall: blocks SQL injection, XSS, bots and floods. Attach to CloudFront, ALB, API Gateway, AppSync.');
   s('shield', 'Shield Advanced', 'Shield', 'security', ['attach'], 's:AWSShield', { global: 1 }, 'Enhanced DDoS protection and response team.');
-  s('acm', 'Certificate Manager (ACM)', 'ACM', 'security', ['attach', 'cert'], 's:AWSCertificateManager', { global: 1 }, 'Free TLS certificates for HTTPS on CloudFront, load balancers and API Gateway.');
+  s('acm', 'Certificate Manager (ACM)', 'ACM', 'security', ['attach', 'cert'], 's:AWSCertificateManager', {}, 'Free TLS certificates for HTTPS. Regional: a certificate for CloudFront must be in us-east-1; one for an ALB or API Gateway must be in the same region.');
   s('kms', 'KMS', 'KMS', 'security', ['support', 'kms'], 's:AWSKeyManagementService', { anyIn: 1, place: 1 }, 'Encryption keys for data at rest in S3, EBS, RDS, DynamoDB...');
   s('secrets', 'Secrets Manager', 'Secrets Mgr', 'security', ['support', 'secrets'], 's:AWSSecretsManager', { anyIn: 1, place: 1 }, 'Stores and automatically rotates database passwords and API keys.');
   s('guardduty', 'GuardDuty', 'GuardDuty', 'security', ['support', 'finding'], 's:AmazonGuardDuty', { anyIn: 1, place: 1, start: 1 }, 'Threat detection from CloudTrail, VPC flow logs and DNS logs.');
@@ -299,7 +302,9 @@
     email: ['pubsub', 'object', 'function', 'bus', 'human'],
     notify: ['delivery', 'stream', 'bus', 'human'],
     contact: ['function', 'ml', 'stream', 'object', 'delivery', 'human'],
-    hybridlink: ['vm', 'container', 'lb', 'sql', 'file', 'cache', 'hub', 'vpcbox', 'netplace', 'object', 'query', 'search'],
+    hybridlink: ['vm', 'container', 'lb', 'sql', 'file', 'cache', 'hub', 'vpcbox', 'netplace', 'object', 'query', 'search', 'dxgw'],
+    cgw: ['#vpn'],
+    dxgw: ['hub', 'vgw'],
     netplace: ['*aws', 'external', 'onprem'],
     mesh: ['vm', 'container', 'function', 'lb'],
     bot: ['function'],

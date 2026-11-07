@@ -77,18 +77,92 @@
   }
 
   // ---------- scenario ----------
+  // A scenario reference is one of:
+  //   { level, seed, id }              a built-in question
+  //   { type: 'fix', level, seed }     a built-in "fix a broken design" exercise
+  //   { type: 'ai', spec }             a case written by Claude (kept in full)
   function loadScenario(ref) {
     try {
-      state.scenario = S.generateScenario(ref.level, ref.seed, ref.id);
-      state.scenarioRef = { level: ref.level, seed: state.scenario.seed, id: state.scenario.id };
+      if (ref.type === 'ai') {
+        state.scenario = S.scenarioFromSpec(ref.spec);
+        state.scenarioRef = { type: 'ai', spec: ref.spec };
+      } else if (ref.type === 'fix') {
+        state.scenario = S.generateFixExercise(ref.level, ref.seed);
+        state.scenarioRef = { type: 'fix', level: ref.level, seed: state.scenario.seed };
+      } else {
+        state.scenario = S.generateScenario(ref.level, ref.seed, ref.id);
+        state.scenarioRef = { level: ref.level, seed: state.scenario.seed, id: state.scenario.id };
+      }
+      rememberTitle(state.scenario.title);
     } catch (e) { state.scenario = null; }
   }
-  function newQuestion() {
+  function startingGraph(sc) {
+    if (sc.startGraph) return JSON.parse(JSON.stringify(sc.startGraph));
+    if (sc.start) return S.layoutSolution(sc.start);
+    return null;
+  }
+  function useScenario(ref) {
     state.mode = 'question';
-    loadScenario({ level: state.level, seed: null, id: null });
+    loadScenario(ref);
     state.result = null; state.showedSample = false;
     state.tab = 'question';
-    renderPanel(); renderChrome(); saveSoon();
+    const start = state.scenario && startingGraph(state.scenario);
+    if (start) {
+      snapshot();
+      state.graph = start; state.sel = null;
+      changed(); fitView();
+      flashNote('The current design is on the canvas. Press Play to see what\'s wrong, then fix it. (Undo brings back your previous diagram.)');
+    } else { renderPanel(); renderChrome(); }
+    saveSoon();
+  }
+  function newQuestion() { useScenario({ level: state.level, seed: null, id: null }); }
+  function newFixExercise() { useScenario({ type: 'fix', level: state.level, seed: null }); }
+
+  // ---------- AI cases (served by api/generate.js) ----------
+  const TITLES_KEY = 'aws-sandbox-titles', CODE_KEY = 'aws-sandbox-code';
+  function recentTitles() { try { return JSON.parse(localStorage.getItem(TITLES_KEY) || '[]'); } catch (e) { return []; } }
+  function rememberTitle(t) {
+    try { const list = recentTitles().filter((x) => x !== t); list.push(t); localStorage.setItem(TITLES_KEY, JSON.stringify(list.slice(-20))); } catch (e) { /* storage unavailable */ }
+  }
+  state.ai = { busy: false, error: '', needCode: false };
+  async function newAiCase(kind) {
+    if (state.ai.busy) return;
+    let code = '';
+    try { code = localStorage.getItem(CODE_KEY) || ''; } catch (e) { /* storage unavailable */ }
+    const input = $('#f-code');
+    if (input && input.value.trim()) { code = input.value.trim(); try { localStorage.setItem(CODE_KEY, code); } catch (e) { /* ignore */ } }
+    state.ai = { busy: kind, error: '', needCode: false };
+    state.tab = 'question'; renderPanel(); renderChrome();
+    try {
+      const r = await fetch('api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: state.level, kind, avoid: recentTitles(), accessCode: code }) });
+      let data = null;
+      try { data = await r.json(); } catch (e) { data = null; }
+      if (!r.ok || !data || !data.spec) {
+        state.ai = { busy: false, needCode: !!(data && data.needCode),
+          error: data && data.error ? data.error : (r.status === 404 || r.status === 405 || !data ? 'AI cases need the server part of this app. Deploy it on Vercel with ANTHROPIC_API_KEY set (see the README). Built-in questions and "Fix a broken design" work without it.' : 'Something went wrong (' + r.status + '). Try again.') };
+        renderPanel(); return;
+      }
+      state.ai = { busy: false, error: '', needCode: false };
+      useScenario({ type: 'ai', spec: data.spec });
+    } catch (e) {
+      state.ai = { busy: false, error: 'Couldn\'t reach the AI case service. AI cases need the server part of this app (deploy on Vercel with ANTHROPIC_API_KEY). Built-in questions and "Fix a broken design" work offline.', needCode: false };
+      renderPanel();
+    }
+  }
+  function caseButtonsHTML(primaryNew) {
+    const busy = state.ai.busy;
+    let h = '<h3>Get a new case</h3><div class="row" style="margin-top:0">' +
+      '<button class="btn' + (primaryNew ? ' primary' : '') + '" type="button" data-act="new">Built-in question</button>' +
+      '<button class="btn" type="button" data-act="fix">Fix a broken design</button></div>' +
+      '<div class="row ai-row">' +
+      '<button class="btn ai" type="button" data-act="ai-build"' + (busy ? ' disabled' : '') + '>' + (busy === 'build' ? 'Claude is writing…' : '✦ New AI case') + '</button>' +
+      '<button class="btn ai" type="button" data-act="ai-fix"' + (busy ? ' disabled' : '') + '>' + (busy === 'fix' ? 'Claude is writing…' : '✦ AI fix-it case') + '</button></div>';
+    if (busy) h += '<p class="note">Claude is writing a new ' + esc(S.LEVEL_NAMES[state.level]) + ' case and testing it in the simulator. This usually takes 20 to 90 seconds.</p>';
+    else h += '<p class="note">AI cases are written fresh by Claude every time and checked by the simulator before you see them.</p>';
+    if (state.ai.needCode) h += '<div class="field"><label for="f-code">Access code</label><input type="text" id="f-code" autocomplete="off" placeholder="Ask the site owner"></div>';
+    if (state.ai.error) h += '<p class="ai-error">' + esc(state.ai.error) + '</p>';
+    return h;
   }
 
   // ---------- icons ----------
@@ -168,6 +242,9 @@
     const bits = [];
     const eff = state.effAzs && state.effAzs[n.id];
     if (eff) p = Object.assign({}, p, { azs: eff });
+    if (n.svc === 'gwendpoint' || n.svc === 'ifendpoint') bits.push(p.service ? 'for ' + SV[p.service].short : 'no service set');
+    if (n.svc === 'onprem') bits.push(p.cidr || '');
+    if (n.svc === 'apigw' && p.vpcLink) bits.push('VPC Link');
     if (n.svc === 'aurora') bits.push((p.azs || 1) === 1 ? 'writer only' : 'writer + ' + ((p.azs || 1) - 1) + ' replica' + ((p.azs || 1) > 2 ? 's' : ''));
     else if (sv.ha === 'azs') bits.push((p.azs || 1) + ' AZ');
     if (n.svc === 's3' && p.access !== 'private') bits.push(p.access === 'website' ? 'website' : 'presigned');
@@ -191,6 +268,7 @@
   function render() {
     state.placement = S.computePlacement(state.graph.nodes);
     state.effAzs = S.effectiveAzs(state.graph.nodes, state.placement);
+    state.cidrs = S.assignCidrs(state.graph.nodes, state.placement);
     const flags = issueFlags();
     // groups (largest first so smaller ones sit on top)
     const groups = state.graph.nodes.filter((n) => SV[n.svc].group).sort((a, b) => b.w * b.h - a.w * a.h);
@@ -200,7 +278,8 @@
       const sel = state.sel && state.sel.type === 'node' && state.sel.id === n.id;
       const label = n.props.label || sv.name;
       const regKey = n.svc === 'region' ? (n.props.region || 'primary') : n.svc === 'vpc' ? (state.placement[n.id] || {}).region || n.props.region || 'primary' : null;
-      const reg = regKey ? '<em>' + esc(n.svc === 'region' ? S.REGIONS[regKey] : S.REGIONS[regKey].split(' ')[0]) + '</em>' : '';
+      const cid = state.cidrs[n.id] && state.cidrs[n.id].cidr;
+      const reg = (regKey ? '<em>' + esc(n.svc === 'region' ? S.REGIONS[regKey] : S.REGIONS[regKey].split(' ')[0]) + '</em>' : '') + (cid ? '<em>' + esc(cid) + '</em>' : '');
       gh += '<div class="group ' + n.svc + (sel ? ' selected' : '') + (flags.err.has(n.id) ? ' err' : '') + '" data-id="' + n.id + '" style="left:' + n.x + 'px;top:' + n.y + 'px;width:' + n.w + 'px;height:' + n.h + 'px">' +
         '<div class="group-head" data-drag="group">' + iconHTML(n.svc) + '<span>' + esc(label) + '</span>' + reg + '</div>' +
         '<div class="resize" data-drag="resize" title="Resize"></div></div>';
@@ -234,8 +313,15 @@
   function edgeGeom(e) {
     const a = nodeById(e.from), b = nodeById(e.to);
     if (!a || !b) return null;
-    const ca = iconCenter(a), cb = iconCenter(b);
-    const p1 = clipToBox(ca, cb, NODE.icon / 2 + 6), p2 = clipToBox(cb, ca, NODE.icon / 2 + 8);
+    const box = (n) => SV[n.svc].group;
+    const ca = box(a) ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : iconCenter(a), cb = box(b) ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : iconCenter(b);
+    const edgePt = (n, c, other) => {
+      if (!box(n)) return clipToBox(c, other, NODE.icon / 2 + 7);
+      const x = Math.max(n.x, Math.min(other.x, n.x + n.w)), y = Math.max(n.y, Math.min(other.y, n.y + n.h));
+      if (x > n.x && x < n.x + n.w && y > n.y && y < n.y + n.h) return { x: n.x, y };
+      return { x, y };
+    };
+    const p1 = edgePt(a, ca, cb), p2 = edgePt(b, cb, ca);
     return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
   }
   function edgeStatus(e) {
@@ -271,7 +357,7 @@
   function renderChrome() {
     $('#levels').innerHTML = S.LEVELS.map((l) => '<button type="button" data-level="' + l + '" aria-pressed="' + (state.level === l) + '">' + S.LEVEL_NAMES[l] + '</button>').join('');
     const strict = state.level === 'associate' || state.level === 'professional';
-    $('#modeChip').innerHTML = (state.mode === 'free' ? '<b>Free build</b>' : '<b>Question</b>') + ' · networking checks: <b>' + (state.level === 'beginner' ? 'off (default VPC)' : strict ? 'strict' : 'relaxed') + '</b>';
+    $('#modeChip').innerHTML = (state.mode === 'free' ? '<b>Free build</b>' : '<b>Question</b>') + ' · networking checks: <b>' + (state.level === 'beginner' ? 'default VPC' : 'full AWS rules') + '</b>';
     $('#btnUndo').disabled = !undoStack.length;
     $('#btnRedo').disabled = !redoStack.length;
     const tabs = { question: '#tab-question', inspect: '#tab-inspect', results: '#tab-results' };
@@ -297,12 +383,14 @@
     if (state.mode === 'free' || !state.scenario) {
       return '<p class="eyebrow">Free build</p><h2>Design anything</h2>' +
         '<p>No question is set. Build any architecture and press <b>Play</b>: every arrow, subnet and setting is checked, and you get suggestions for simpler or cheaper options.</p>' +
-        '<p class="note">The difficulty buttons at the top also set how strict the networking checks are. Beginner skips them (everything runs in the default VPC), Intermediate only warns about missing VPCs, NAT gateways and endpoints, and Associate and Professional treat them as failures.</p>' +
-        '<div class="row"><button class="btn primary" type="button" data-act="new">Give me a ' + esc(S.LEVEL_NAMES[state.level]) + ' question</button></div>' + howtoHTML();
+        '<p class="note">From Intermediate up, Play applies the real AWS networking rules: subnets, IP ranges, gateways, endpoints and hybrid links. Beginner lets you skip the network: servers and databases go in the default VPC, like a new AWS account.</p>' +
+        caseButtonsHTML(true) + howtoHTML();
     }
     const sc = state.scenario;
     const res = state.result && !state.resultStale ? state.result.requirements : null;
-    let h = '<span class="lvl-chip">' + esc(S.LEVEL_NAMES[sc.level]) + '</span><h2>' + esc(sc.title) + '</h2><div class="story">' + sc.story.map((t) => '<p>' + esc(t) + '</p>').join('') + '</div>';
+    const badge = sc.kind === 'fix' ? '<span class="lvl-chip kind-fix">Fix it</span> ' : '';
+    const src = sc.source === 'ai' || state.scenarioRef && state.scenarioRef.type === 'ai' ? '<span class="lvl-chip kind-ai">Written by Claude</span> ' : '';
+    let h = badge + src + '<span class="lvl-chip">' + esc(S.LEVEL_NAMES[sc.level]) + '</span><h2>' + esc(sc.title) + '</h2><div class="story">' + sc.story.map((t) => '<p>' + esc(t) + '</p>').join('') + '</div>';
     h += '<h3>Your design must</h3><ul class="reqs">';
     sc.reqs.forEach((q, i) => {
       const st = res ? (res[i].ok ? 'ok' : 'no') : '';
@@ -313,10 +401,10 @@
     if (!res) h += '<p class="note" style="margin-top:10px">' + (sc.level === 'beginner' ? 'Drag the services from the left, connect them with arrows, then press <b>Play</b>. At Beginner you don\'t need VPC boxes: servers and databases go in AWS\'s default network automatically.' : 'Build it on the canvas, then press <b>Play</b> to test it. Hints appear for anything that fails.') + '</p>';
     h += '<div class="row">' +
       '<button class="btn" type="button" data-act="sample" id="sampleBtn">Show a sample answer</button>' +
-      '<button class="btn" type="button" data-act="new">Another question</button>' +
+      (sc.kind === 'fix' ? '<button class="btn" type="button" data-act="restart">Reset to the broken design</button>' : '') +
       '<button class="btn ghost" type="button" data-act="free">Free build</button></div>';
     if (state.showedSample) h += '<p class="note" style="margin-top:10px">This is one answer that passes. Other designs can pass too: press Play on your own version to check it.</p>';
-    return h + howtoHTML();
+    return h + caseButtonsHTML(false) + howtoHTML();
   }
   function howtoHTML() {
     return '<h3>How it works</h3><ol class="howto">' +
@@ -362,6 +450,11 @@
         pubsubnet: 'Has a route to the Internet Gateway. Load balancers, NAT gateways and bastion hosts go here. Drag the box by its title; resize from the corner.',
         privsubnet: 'No direct route from the internet. App servers, containers and databases go here. Drag the box by its title; resize from the corner.',
       };
+      if (n.svc === 'vpc') h += textField('f-cidr', 'IPv4 range (CIDR)', 'cidr', n.props.cidr || '10.0.0.0/16', '10.0.0.0/16', 'Between /16 and /28. VPCs you connect (peering, Transit Gateway, VPN) must not overlap.');
+      if (n.svc === 'pubsubnet' || n.svc === 'privsubnet') {
+        const c = state.cidrs[n.id] || {};
+        h += textField('f-cidr', 'IPv4 range (CIDR)', 'cidr', n.props.cidr || '', c.cidr || 'auto', n.props.cidr ? 'Must be inside the VPC range and not overlap other subnets. AWS reserves 5 addresses per subnet.' : 'Leave empty to use the next free range' + (c.cidr ? ' (' + c.cidr + ')' : '') + ', or type your own.');
+      }
       h += '<p class="note" style="margin-top:12px">' + NOTES[n.svc] + '</p>';
       h += '<div class="row"><button class="btn danger" type="button" data-act="delete">Delete box (keeps services)</button></div>';
       return h;
@@ -386,6 +479,13 @@
     else if (!sv.global && !sv.group && !sv.vpc && sv.cat !== 'clients' && !pl.vpc) {
       h += selectField('f-region', 'Region', 'region', n.props.region || 'primary', Object.keys(S.REGIONS).map((k) => [k, S.REGIONS[k]]));
     }
+    if (n.svc === 'onprem') h += textField('f-cidr', 'Data center IP range (CIDR)', 'cidr', n.props.cidr || '', '192.168.0.0/16', 'Must not overlap any VPC you connect to with VPN or Direct Connect.');
+    if (n.svc === 'gwendpoint') h += selectField('f-svc', 'Service', 'service', n.props.service || 's3', [['s3', 'S3'], ['dynamodb', 'DynamoDB']]);
+    if (n.svc === 'ifendpoint') h += selectField('f-svc', 'Service', 'service', n.props.service || '', [['', 'Choose a service…']].concat(S.SERVICE_LIST.filter((x) => !x.global && !x.group && !x.vpc && !x.place && x.cat !== 'clients' && !x.tags.includes('attach') && !x.tags.includes('hybridlink') && !['cgw', 'cloudformation', 'cdk'].includes(x.id)).map((x) => [x.id, x.name])));
+    if (n.svc === 'gwendpoint' || n.svc === 'ifendpoint') h += '<p class="note">' + (n.svc === 'gwendpoint' ? 'Gateway endpoints are free and only exist for S3 and DynamoDB, in the same region as the VPC. Add one per service.' : 'One interface endpoint serves one service. Private resources calling several AWS services need one endpoint each (or a NAT gateway). ECR also needs an S3 gateway endpoint for image layers.') + '</p>';
+    if (n.svc === 'apigw') h += checkField('f-vpclink', 'vpcLink', n.props.vpcLink, 'VPC Link (lets API Gateway reach a private load balancer)');
+    if (n.svc === 'tgw' || n.svc === 'peering') h += '<p class="note">Attach it by dragging from its blue dot onto each VPC box.</p>';
+    if (n.svc === 'vgw' || n.svc === 'igw') h += '<p class="note">Attach it to a VPC by dragging it onto the edge of the VPC box. One per VPC.</p>';
     if (n.svc === 's3') h += selectField('f-access', 'Access', 'access', n.props.access, [['private', 'Private (Block Public Access on)'], ['presigned', 'Presigned URL uploads / downloads'], ['website', 'Public static website']]);
     if (n.svc === 'lambda') {
       h += checkField('f-url', 'functionUrl', n.props.functionUrl, 'Function URL (public HTTPS endpoint)');
@@ -402,6 +502,9 @@
   function selectField(id, label, prop, val, opts) {
     return '<div class="field"><label for="' + id + '">' + esc(label) + '</label><select id="' + id + '" data-prop="' + prop + '">' +
       opts.map(([v, t]) => '<option value="' + v + '"' + (String(v) === String(val) ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></div>';
+  }
+  function textField(id, label, prop, val, placeholder, note) {
+    return '<div class="field"><label for="' + id + '">' + esc(label) + '</label><input type="text" id="' + id + '" data-prop="' + prop + '" value="' + esc(val) + '" placeholder="' + esc(placeholder) + '" spellcheck="false" autocomplete="off">' + (note ? '<span class="note">' + esc(note) + '</span>' : '') + '</div>';
   }
   function checkField(id, prop, val, label) {
     return '<label class="check" for="' + id + '"><input type="checkbox" id="' + id + '" data-prop="' + prop + '"' + (val ? ' checked' : '') + '><span>' + esc(label) + '</span></label>';
@@ -446,6 +549,10 @@
     } else {
       n.x = Math.round(wx - NODE.w / 2); n.y = Math.round(wy - NODE.icon / 2);
     }
+    if (svcId === 'vpc') {
+      const used = state.graph.nodes.filter((g) => g.svc === 'vpc').map((g) => g.props.cidr);
+      for (let i = 0; i < 250; i++) { const c = '10.' + i + '.0.0/16'; if (!used.includes(c)) { n.props.cidr = c; break; } }
+    }
     state.graph.nodes.push(n);
     state.sel = { type: 'node', id: n.id };
     if (state.tab !== 'question' || window.innerWidth < 900) state.tab = 'inspect';
@@ -455,7 +562,9 @@
   function addEdge(from, to) {
     if (from === to) return;
     const a = nodeById(from), b = nodeById(to);
-    if (!a || !b || SV[b.svc].group || SV[a.svc].group) return;
+    if (!a || !b) return;
+    const attach = b.svc === 'vpc' && (SV[a.svc].tags.includes('hub') || SV[a.svc].tags.includes('hybridlink'));
+    if (SV[a.svc].group || (SV[b.svc].group && !attach)) return;
     if (state.graph.edges.some((e) => e.from === from && e.to === to)) return;
     snapshot();
     const rev = state.graph.edges.find((e) => e.from === to && e.to === from);
@@ -482,6 +591,7 @@
     if (!n) return;
     snapshot();
     if (prop === 'label') { if (value.trim()) n.props.label = value.trim(); else delete n.props.label; }
+    else if (prop === 'cidr') n.props.cidr = String(value).trim();
     else n.props[prop] = value;
     if (state.result) state.resultStale = true;
     const keepTab = state.tab;
@@ -525,7 +635,7 @@
   function play() {
     if (state.animating) return;
     state.connectFrom = null;
-    const strict = state.level === 'associate' || state.level === 'professional';
+    const strict = state.level !== 'beginner';
     const reqs = state.mode === 'question' && state.scenario ? state.scenario.reqs : [];
     const r = S.evaluate(state.graph, { strict, simple: state.level === 'beginner', requirements: reqs, level: state.level });
     state.result = r; state.resultStale = false;
@@ -670,8 +780,13 @@
       state.tempLine = null;
       const el = document.elementFromPoint(ev.clientX, ev.clientY);
       const over = el && el.closest && el.closest('.node');
+      const src = nodeById(d.from);
       if (over && over.dataset.id !== d.from) addEdge(d.from, over.dataset.id);
-      else renderEdges();
+      else if (src && (SV[src.svc].tags.includes('hub') || SV[src.svc].tags.includes('hybridlink'))) {
+        const w = toWorld(ev.clientX, ev.clientY);
+        const v = state.graph.nodes.filter((g) => g.svc === 'vpc' && w.x >= g.x && w.x <= g.x + g.w && w.y >= g.y && w.y <= g.y + g.h).sort((x, y) => x.w * x.h - y.w * y.h)[0];
+        if (v) addEdge(d.from, v.id); else renderEdges();
+      } else renderEdges();
       document.querySelectorAll('.node.connect-target').forEach((x) => x.classList.remove('connect-target'));
     } else if (d.moved) {
       changed();
@@ -772,7 +887,10 @@
     snapshot();
     const g = (svc, x, y, w, h, props) => { const n = { id: uid('n'), svc, x, y, w, h, props: Object.assign(S.defaultProps(svc), props || {}) }; state.graph.nodes.push(n); return n; };
     g('region', x0, y0, 1000, 680, { region: 'primary' });
-    g('vpc', x0 + 40, y0 + 50, 920, 600, { label: 'VPC' });
+    const used = state.graph.nodes.filter((x) => x.svc === 'vpc').map((x) => x.props.cidr);
+    let cidr = '10.0.0.0/16';
+    for (let i = 0; i < 250; i++) { const c = '10.' + i + '.0.0/16'; if (!used.includes(c)) { cidr = c; break; } }
+    g('vpc', x0 + 40, y0 + 50, 920, 600, { label: 'VPC', cidr });
     ['A', 'B'].forEach((z, i) => {
       const ox = x0 + 80 + i * 440;
       g('az', ox, y0 + 100, 400, 520, { label: 'Availability Zone ' + z });
@@ -820,6 +938,10 @@
     if (act) {
       const a = act.dataset.act;
       if (a === 'new') newQuestion();
+      else if (a === 'fix') newFixExercise();
+      else if (a === 'ai-build') newAiCase('build');
+      else if (a === 'ai-fix') newAiCase('fix');
+      else if (a === 'restart') { const g = startingGraph(state.scenario); if (g) { snapshot(); state.graph = g; state.sel = null; state.result = null; state.showedSample = false; changed(); fitView(); } }
       else if (a === 'free') { state.mode = 'free'; state.result = null; renderPanel(); renderChrome(); saveSoon(); }
       else if (a === 'sample') {
         if (state.graph.nodes.length && !sampleArmed) {

@@ -1,0 +1,11 @@
+{
+  "name": "aws-architecture-sandbox",
+  "private": true,
+  "description": "Design AWS architectures, press Play, learn why they would or wouldn't work.",
+  "scripts": {
+    "test": "node tests/check-rules.js && node tests/check-scenarios.js && node tests/check-fix-exercises.js && node tests/check-generate.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0"
+  }
+}
